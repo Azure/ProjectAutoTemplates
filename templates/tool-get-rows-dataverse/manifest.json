@@ -53,7 +53,7 @@
           "kind": "Http",
           "inputs": {
             "statusCode": 200,
-            "body": "$body('List_rows')"
+            "body": "${body('List_rows')}"
           },
           "runAfter": {
             "List_rows": [
