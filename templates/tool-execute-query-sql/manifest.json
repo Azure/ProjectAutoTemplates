@@ -49,7 +49,7 @@
             },
             "method": "post",
             "path": "/v2/datasets/,/query/sql",
-            "body": "$triggerBody()?.['sql_query']"
+            "body": "${triggerBody()?.['sql_query']}"
           },
           "runAfter": {}
         },
@@ -60,7 +60,7 @@
             "headers": {
               "Content-Type": "application/json"
             },
-            "body": "$body('Execute_a_SQL_query')"
+            "body": "${body('Execute_a_SQL_query')}"
           },
           "runAfter": {
             "Execute_a_SQL_query": [

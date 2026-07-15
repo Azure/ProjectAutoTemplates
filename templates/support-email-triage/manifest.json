@@ -121,7 +121,7 @@
             "body": {
               "Title": "${triggerBody()['bodyPreview']}",
               "Subject": "${triggerBody()['subject']}",
-              "Sender": "${triggerBody()['toRecipients']}",
+              "Sender": "${triggerBody()['from']}",
               "InternetMessageId": "${triggerBody()['id']}",
               "ReceivedAt": "${triggerBody()['receivedDateTime']}",
               "TriggerRunId": "1"
