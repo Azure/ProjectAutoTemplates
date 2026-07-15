@@ -1,0 +1,96 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-call-uri-http",
+    "name": "HTTP Endpoint Caller",
+    "description": "Accepts an HTTP request containing a URI and optional body, calls the target endpoint using a configurable HTTP method, and returns the response. Useful as an AI-agent tool for making outbound HTTP calls.",
+    "category": "automation",
+    "tags": [
+      "http",
+      "api",
+      "patterns"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "HTTP_URI": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "HTTP": {
+          "type": "Http",
+          "inputs": {
+            "uri": "${triggerBody()?.['HTTP_URI']}",
+            "method": "GET"
+          },
+          "runAfter": {}
+        },
+        "Response": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "runAfter": {
+            "HTTP": [
+              "SUCCEEDED"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "X-Forwarded-For": "203.0.113.42",
+        "X-Source": "portal-test"
+      },
+      "queries": {
+        "tenantId": "t1"
+      },
+      "body": {
+        "HTTP_URI": "https://httpbin.org/get"
+      }
+    }
+  },
+  "mocks": {
+    "HTTP": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "url": "https://httpbin.org/get",
+          "headers": {
+            "Accept": "*/*"
+          }
+        }
+      }
+    }
+  },
+  "connections": {}
+}

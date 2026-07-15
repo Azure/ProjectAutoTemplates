@@ -1,0 +1,57 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "receive-request-send-response",
+    "name": "Request-Response",
+    "description": "Receives a message or request over HTTP or HTTPS and returns a response. A starting point for building synchronous request-response workflow patterns.",
+    "category": "automation",
+    "tags": [
+      "http",
+      "request",
+      "response",
+      "patterns"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "kind": "Http",
+          "type": "Request"
+        }
+      },
+      "actions": {
+        "Response": {
+          "type": "Response",
+          "kind": "Http",
+          "inputs": {
+            "statusCode": 200
+          },
+          "runAfter": {}
+        }
+      },
+      "outputs": {}
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "message": "Hello, World!"
+      }
+    }
+  },
+  "mocks": {},
+  "connections": {}
+}

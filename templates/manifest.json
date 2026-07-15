@@ -1,0 +1,13 @@
+[
+  "order-validation",
+  "receive-request-send-response",
+  "support-email-triage",
+  "tool-call-uri-http",
+  "tool-execute-query-sql",
+  "tool-expense-report",
+  "tool-get-rows-dataverse",
+  "tool-get-weather-msn",
+  "tool-invoice-flow",
+  "tool-send-email-outlook",
+  "tool-sentiment-analysis"
+]

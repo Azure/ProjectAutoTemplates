@@ -1,0 +1,110 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-get-rows-dataverse",
+    "name": "Get Rows from Dataverse Table",
+    "description": "Gets rows from a Microsoft Dataverse table. Triggered by an HTTP request, retrieves rows from the specified Dataverse table, and returns the response to the caller.",
+    "category": "automation",
+    "tags": [
+      "dataverse",
+      "data"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        }
+      },
+      "actions": {
+        "List_rows": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "commondataservice_#workflowname#"
+              }
+            },
+            "method": "get",
+            "headers": {
+              "prefer": "odata.include-annotations=*",
+              "accept": "application/json;odata.metadata=full",
+              "organization": ""
+            },
+            "path": "/api/data/v9.1/"
+          },
+          "runAfter": {}
+        },
+        "Response": {
+          "type": "Response",
+          "kind": "Http",
+          "inputs": {
+            "statusCode": 200,
+            "body": "$body('List_rows')"
+          },
+          "runAfter": {
+            "List_rows": [
+              "SUCCEEDED"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "List_rows": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "value": [
+            {
+              "accountid": "00000000-0000-0000-0000-000000000001",
+              "name": "Contoso Ltd",
+              "address1_city": "Redmond",
+              "revenue": 50000
+            },
+            {
+              "accountid": "00000000-0000-0000-0000-000000000002",
+              "name": "Fabrikam Inc",
+              "address1_city": "Seattle",
+              "revenue": 75000
+            }
+          ]
+        }
+      }
+    }
+  },
+  "connections": {
+    "commondataservice_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/commondataservice"
+    }
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-send-email-outlook",
+    "name": "Send Email using Outlook",
+    "description": "Sends an email using Outlook with the specified recipient, subject, and body. Designed to be triggered by an HTTP request and to send email via an Outlook account.",
+    "category": "automation",
+    "tags": [
+      "email",
+      "outlook",
+      "office365",
+      "notifications"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "email_to": {
+                  "type": "string"
+                },
+                "email_subject": {
+                  "type": "string"
+                },
+                "email_body": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Send_an_email_": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/office365",
+              "operationId": "SendEmailV2",
+              "connection": {
+                "referenceName": "office365_#workflowname#"
+              }
+            },
+            "method": "post",
+            "body": {
+              "To": "${triggerBody()?.['email_to']}",
+              "Subject": "${triggerBody()?.['email_subject']}",
+              "Body": "<p class=\"editor-paragraph\">${triggerBody()?.['email_body']}</p>",
+              "Importance": "Normal"
+            },
+            "path": "/v2/Mail"
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/v2/Mail"
+          },
+          "runAfter": {}
+        },
+        "Response": {
+          "type": "Response",
+          "kind": "Http",
+          "inputs": {
+            "statusCode": 200
+          },
+          "runAfter": {
+            "Send_an_email_": [
+              "SUCCEEDED"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "email_to": "user@example.com",
+        "email_subject": "Test Email from Otto",
+        "email_body": "This is a test email sent via the Otto workflow."
+      }
+    }
+  },
+  "mocks": {
+    "Send_an_email_": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "To": "user@example.com",
+          "Subject": "Test Email from Otto",
+          "Body": "This is a test email sent via the Otto workflow.",
+          "Importance": "Normal"
+        }
+      }
+    }
+  },
+  "connections": {
+    "office365_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    }
+  }
+}
