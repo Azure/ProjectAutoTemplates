@@ -835,6 +835,20 @@
       }
     }
   },
+  "notes": {
+    "1308d3c1-b8f6-4914-a036-2a29f32b706c": {
+      "content": "The sample expense report in this workflow is a snippet from the report available at Logic Apps GitHub repo here - https://github.com/Azure/logicapps/blob/master/templates-artifacts/Automation_Expense_Report_Simple.xlsx\n\n\nSample files can come from a REST endpoint like in this template, or via storage, sharepoint or any other source",
+      "color": "#FFFBCC",
+      "metadata": {
+        "position": {
+          "x": 144,
+          "y": -167
+        },
+        "width": 513,
+        "height": 154
+      }
+    }
+  },
   "connections": {
     "formrecognizer_#workflowname#": {
       "connectorType": "shared",
