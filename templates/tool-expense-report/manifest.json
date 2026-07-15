@@ -145,8 +145,7 @@
         }
       },
       "contentVersion": "1.0.0.0"
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_an_HTTP_request_is_received",

@@ -179,8 +179,7 @@
         }
       },
       "contentVersion": "1.0.0.0"
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "Start",

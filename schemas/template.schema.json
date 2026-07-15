@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
   "title": "OttoTemplate",
-  "description": "Canonical manifest.json file format for Project Otto templates — a self-contained bundle that includes a workflow definition, mock data, trigger sample data, and connections in a single file. This schema covers the template envelope only; the embedded workflow.definition payload is governed by the official Azure Logic Apps workflow definition schema declared in workflow.definition.$schema. This file is the cross-repo source of truth: this repo validates against it in CI, and the portal repo consumes the same file. Validation-only semantics: consumers are responsible for normalization (e.g. coercing metadata.category to an array) and for applying defaults.",
+  "description": "Canonical manifest.json file format for Project Otto templates — a self-contained bundle that includes a workflow definition, mock data, trigger sample data, and connections in a single file. This schema covers the template envelope only; the embedded workflow.definition payload is governed by the official Azure Logic Apps workflow definition schema declared in workflow.definition.$schema. This file is the cross-repo source of truth: this repo validates against it in CI, and the portal repo consumes the same file. Validation-only semantics: consumers are responsible for applying defaults.",
   "type": "object",
   "required": ["kind", "apiVersion", "metadata", "workflow", "trigger"],
   "properties": {
@@ -53,15 +53,10 @@
           "minLength": 1
         },
         "category": {
-          "description": "One or more free-form category strings. Prefer the array form; a bare string is accepted for back-compat with templates authored before multi-category support and must be normalized to a one-element array by consumers.",
-          "anyOf": [
-            { "type": "string", "minLength": 1 },
-            {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 },
-              "minItems": 1
-            }
-          ]
+          "description": "One or more free-form category strings.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
         },
         "tags": {
           "description": "Search / filter tags.",
@@ -82,7 +77,7 @@
       }
     },
     "workflow": {
-      "description": "The bundled workflow: the Logic Apps workflow file shape (definition + kind) plus portal canvas notes.",
+      "description": "The bundled workflow: the definition only, with no wrapper metadata.",
       "type": "object",
       "required": ["definition"],
       "properties": {
@@ -95,11 +90,9 @@
               "const": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
             }
           }
-        },
-        "kind": { "type": "string" },
-        "metadata": { "type": "object" },
-        "notes": { "$ref": "#/$defs/notes" }
-      }
+        }
+      },
+      "additionalProperties": false
     },
     "templateTrigger": {
       "type": "object",

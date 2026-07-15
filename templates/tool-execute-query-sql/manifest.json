@@ -70,8 +70,7 @@
         }
       },
       "outputs": {}
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_a_HTTP_request_is_received",

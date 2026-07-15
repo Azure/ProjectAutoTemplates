@@ -28,8 +28,8 @@ Every template `manifest.json` must satisfy the JSON Schema in
 
 - `kind: "OttoTemplate"` and `apiVersion: "v1"`
 - `metadata` — `id` (must match the folder name), `name`, `description`, `category`
-  (array of category strings; a bare string is accepted for back-compat),
-  `tags`, `author` (must be `"Microsoft"`), `source` (must be `"builtin"`)
+  (array of category strings), `tags`, `author` (must be `"Microsoft"`),
+  `source` (must be `"builtin"`)
 - `workflow` — the workflow to import. Its `definition` must declare the official
   Azure Logic Apps schema in `$schema`
   (`https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#`),
@@ -75,9 +75,8 @@ the same file instead of maintaining a parallel schema — copy it, or fetch it 
 https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json
 ```
 
-The schema is validation-only: consumers are responsible for normalization (e.g. coercing
-`metadata.category` to an array) and for applying defaults. Format changes must land here
-and in consuming repos in the same release.
+The schema is validation-only: consumers are responsible for applying defaults. Format
+changes must land here and in consuming repos in the same release.
 
 ## Trademarks
 
