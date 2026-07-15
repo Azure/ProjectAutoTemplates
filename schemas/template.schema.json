@@ -18,10 +18,6 @@
       "additionalProperties": { "$ref": "#/$defs/templateMockOutput" },
       "default": {}
     },
-    "notes": {
-      "$ref": "#/$defs/notes",
-      "description": "Sticky-note metadata copied from notes.json / notes-draft.json so templates round-trip the canvas annotations alongside mocks. Shape mirrors workflow.notes."
-    },
     "connections": {
       "description": "Connection references keyed by connection name. Keys must use the _#workflowname# placeholder suffix.",
       "type": "object",
@@ -32,6 +28,7 @@
       "default": {}
     }
   },
+  "additionalProperties": false,
   "$defs": {
     "templateMetadata": {
       "type": "object",
@@ -160,34 +157,6 @@
           "description": "API identifier path, e.g. '/managedApis/sql' or '/serviceProviders/AzureBlob'.",
           "type": "string",
           "minLength": 1
-        }
-      }
-    },
-    "notes": {
-      "description": "Canvas sticky notes, keyed by note id.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["content", "color", "metadata"],
-        "properties": {
-          "content": { "type": "string" },
-          "color": { "type": "string" },
-          "metadata": {
-            "type": "object",
-            "required": ["position", "width", "height"],
-            "properties": {
-              "position": {
-                "type": "object",
-                "required": ["x", "y"],
-                "properties": {
-                  "x": { "type": "number" },
-                  "y": { "type": "number" }
-                }
-              },
-              "width": { "type": "number" },
-              "height": { "type": "number" }
-            }
-          }
         }
       }
     }
