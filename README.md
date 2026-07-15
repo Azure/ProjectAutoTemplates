@@ -13,7 +13,7 @@ templates gallery.
 templates/
   manifest.json                # JSON array of template folder ids — the publish allow-list
   <template-id>/manifest.json  # full template document (kind: OttoTemplate, apiVersion: v1)
-schemas/                       # Zod schemas used by CI validation
+schemas/                       # JSON Schema (source of truth) used by CI validation
 validate_templates.ts          # validation entry point (run by CI on every PR)
 ```
 
@@ -23,13 +23,17 @@ listed there fails validation and is not published.
 
 ## Template format
 
-Every template `manifest.json` must satisfy the `Template` schema in
-[`schemas/template.ts`](schemas/template.ts):
+Every template `manifest.json` must satisfy the JSON Schema in
+[`schemas/template.schema.json`](schemas/template.schema.json):
 
 - `kind: "OttoTemplate"` and `apiVersion: "v1"`
-- `metadata` — `id` (must match the folder name), `name`, `description`, `category`,
+- `metadata` — `id` (must match the folder name), `name`, `description`, `category`
+  (array of category strings; a bare string is accepted for back-compat),
   `tags`, `author` (must be `"Microsoft"`), `source` (must be `"builtin"`)
-- `workflow` — the workflow definition
+- `workflow` — the workflow to import. Its `definition` must declare the official
+  Azure Logic Apps schema in `$schema`
+  (`https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#`),
+  which governs the definition's structure — the template schema does not re-describe it
 - `trigger` — sample trigger outputs used to pre-fill test runs
 - `mocks` — canned per-action outputs with `status` of `"Succeeded"` or `"Failed"`
   (or `{ "runForReal": true }` opt-outs)
@@ -53,11 +57,27 @@ pnpm install
 pnpm run test
 ```
 
-## Schema sync
+## Schema sharing
 
-`schemas/template.ts` and `schemas/workflowDefinition.ts` are manual copies of the portal's
-canonical schemas. When the portal format changes, the copies here must be updated in the
-same release — see the header comments in those files.
+[`schemas/template.schema.json`](schemas/template.schema.json) is a standard
+[JSON Schema (draft 2020-12)](https://json-schema.org/) and is the **source of truth** for
+the template *envelope* format (metadata, trigger sample, mocks, notes, connections).
+The embedded `workflow.definition` payload is intentionally out of scope: its authority is
+the official Azure Logic Apps workflow definition schema pinned in
+`workflow.definition.$schema`. (That official 2016-06-01 schema predates Logic Apps
+Standard and agentic action types such as `Agent` and `ServiceProvider`, so CI enforces
+the pin but does not validate definitions against it.)
+
+The envelope schema is language-neutral so other repos (e.g. the portal) can consume
+the same file instead of maintaining a parallel schema — copy it, or fetch it from
+
+```
+https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json
+```
+
+The schema is validation-only: consumers are responsible for normalization (e.g. coercing
+`metadata.category` to an array) and for applying defaults. Format changes must land here
+and in consuming repos in the same release.
 
 ## Trademarks
 

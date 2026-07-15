@@ -5,7 +5,7 @@
     "id": "receive-request-send-response",
     "name": "Request-Response",
     "description": "Receives a message or request over HTTP or HTTPS and returns a response. A starting point for building synchronous request-response workflow patterns.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "http",
       "request",

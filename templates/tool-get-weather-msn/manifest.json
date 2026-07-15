@@ -5,7 +5,7 @@
     "id": "tool-get-weather-msn",
     "name": "Get Weather via MSN Weather",
     "description": "Retrieves the weather forecast for today using the MSN Weather API. Designed to be triggered by an HTTP request and to provide weather information for a given location.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "weather",
       "msn",

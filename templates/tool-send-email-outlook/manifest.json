@@ -5,7 +5,7 @@
     "id": "tool-send-email-outlook",
     "name": "Send Email using Outlook",
     "description": "Sends an email using Outlook with the specified recipient, subject, and body. Designed to be triggered by an HTTP request and to send email via an Outlook account.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "email",
       "outlook",

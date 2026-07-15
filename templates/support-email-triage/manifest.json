@@ -5,7 +5,7 @@
     "id": "support-email-triage",
     "name": "Support Email Triage with Teams Escalation and SharePoint Logging",
     "description": "Monitors a support inbox and automatically escalates urgent emails to a Microsoft Teams channel. All incoming emails are logged to a SharePoint list for tracking.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "email",
       "support",

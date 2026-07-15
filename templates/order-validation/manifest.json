@@ -5,7 +5,7 @@
     "id": "order-validation",
     "name": "HTTP-Triggered Order Approval Workflow",
     "description": "Automatically approves or rejects incoming orders based on region and amount. Orders from the US exceeding $100 are approved; all others are rejected with a reason. Triggered via HTTP POST.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "http",
       "validation",

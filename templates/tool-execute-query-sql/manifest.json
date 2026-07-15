@@ -5,7 +5,7 @@
     "id": "tool-execute-query-sql",
     "name": "SQL Query Executor",
     "description": "Accepts an HTTP request containing a SQL query, executes it against a configured SQL Server database, and returns the result set. Designed as an AI-agent tool for data retrieval.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "sql",
       "database",

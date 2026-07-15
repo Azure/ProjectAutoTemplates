@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "title": "OttoTemplate",
+  "description": "Canonical manifest.json file format for Project Otto templates — a self-contained bundle that includes a workflow definition, mock data, trigger sample data, and connections in a single file. This schema covers the template envelope only; the embedded workflow.definition payload is governed by the official Azure Logic Apps workflow definition schema declared in workflow.definition.$schema. This file is the cross-repo source of truth: this repo validates against it in CI, and the portal repo consumes the same file. Validation-only semantics: consumers are responsible for normalization (e.g. coercing metadata.category to an array) and for applying defaults.",
+  "type": "object",
+  "required": ["kind", "apiVersion", "metadata", "workflow", "trigger"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "kind": { "const": "OttoTemplate" },
+    "apiVersion": { "const": "v1" },
+    "metadata": { "$ref": "#/$defs/templateMetadata" },
+    "workflow": { "$ref": "#/$defs/workflow" },
+    "trigger": { "$ref": "#/$defs/templateTrigger" },
+    "mocks": {
+      "description": "Per-action mock outputs, keyed by action name.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/templateMockOutput" },
+      "default": {}
+    },
+    "notes": {
+      "$ref": "#/$defs/notes",
+      "description": "Sticky-note metadata copied from notes.json / notes-draft.json so templates round-trip the canvas annotations alongside mocks. Shape mirrors workflow.notes."
+    },
+    "connections": {
+      "description": "Connection references keyed by connection name. Keys must use the _#workflowname# placeholder suffix.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^\\S*_#workflowname#$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/templateConnection" },
+      "default": {}
+    }
+  },
+  "$defs": {
+    "templateMetadata": {
+      "type": "object",
+      "required": ["id", "name", "description", "category", "author", "source"],
+      "properties": {
+        "id": {
+          "description": "Stable, URL-safe identifier (e.g. \"tool-call-uri-http\").",
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "description": "Human-readable template name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "description": "One-to-two sentence description.",
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "description": "One or more free-form category strings. Prefer the array form; a bare string is accepted for back-compat with templates authored before multi-category support and must be normalized to a one-element array by consumers.",
+          "anyOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
+          ]
+        },
+        "tags": {
+          "description": "Search / filter tags.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "author": {
+          "description": "Author or organisation.",
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "description": "Provenance label (e.g. \"builtin\", \"community\").",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "workflow": {
+      "description": "The bundled workflow: the Logic Apps workflow file shape (definition + kind) plus portal canvas notes.",
+      "type": "object",
+      "required": ["definition"],
+      "properties": {
+        "definition": {
+          "description": "Azure Logic Apps workflow definition. Its structure (triggers, actions, contentVersion, outputs, parameters, …) is governed by the official schema referenced in $schema — this envelope schema deliberately does not re-describe it. Note: the official 2016-06-01 schema predates Logic Apps Standard and agentic action types (Agent, ServiceProvider, ApiConnectionNotification), so validation against it is informational until Microsoft publishes an updated schema.",
+          "type": "object",
+          "required": ["$schema"],
+          "properties": {
+            "$schema": {
+              "const": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
+            }
+          }
+        },
+        "kind": { "type": "string" },
+        "metadata": { "type": "object" },
+        "notes": { "$ref": "#/$defs/notes" }
+      }
+    },
+    "templateTrigger": {
+      "type": "object",
+      "required": ["name", "outputs"],
+      "properties": {
+        "name": {
+          "description": "Trigger action name (must match a key in workflow.definition.triggers).",
+          "type": "string",
+          "minLength": 1
+        },
+        "outputs": {
+          "description": "Sample outputs used to pre-fill the Test Draft editor.",
+          "type": "object",
+          "required": ["method", "headers", "queries"],
+          "properties": {
+            "method": { "type": "string", "minLength": 1 },
+            "headers": { "type": "object" },
+            "queries": { "type": "object" },
+            "body": {}
+          }
+        }
+      }
+    },
+    "templateMockOutput": {
+      "description": "Per-action mock entry. Two valid shapes: { runForReal: true } — explicit opt-out, the runtime executes the action live; or { status, outputs } (with runForReal absent or false) — the runtime uses the canned output instead of executing the action.",
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["runForReal"],
+          "properties": {
+            "runForReal": { "const": true }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["status", "outputs"],
+          "properties": {
+            "runForReal": { "const": false },
+            "status": {
+              "description": "Mock run status.",
+              "enum": ["Succeeded", "Failed"]
+            },
+            "outputs": {
+              "type": "object",
+              "required": ["statusCode"],
+              "properties": {
+                "statusCode": { "type": "string", "minLength": 1 },
+                "body": {},
+                "headers": { "type": "object" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "templateConnection": {
+      "type": "object",
+      "required": ["connectorType", "apiId"],
+      "properties": {
+        "connectorType": {
+          "description": "Connection type: 'shared' for managed APIs, 'inapp' for built-in connectors, 'agent' for agent connections.",
+          "enum": ["shared", "inapp", "agent"]
+        },
+        "apiId": {
+          "description": "API identifier path, e.g. '/managedApis/sql' or '/serviceProviders/AzureBlob'.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "notes": {
+      "description": "Canvas sticky notes, keyed by note id.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["content", "color", "metadata"],
+        "properties": {
+          "content": { "type": "string" },
+          "color": { "type": "string" },
+          "metadata": {
+            "type": "object",
+            "required": ["position", "width", "height"],
+            "properties": {
+              "position": {
+                "type": "object",
+                "required": ["x", "y"],
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" }
+                }
+              },
+              "width": { "type": "number" },
+              "height": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

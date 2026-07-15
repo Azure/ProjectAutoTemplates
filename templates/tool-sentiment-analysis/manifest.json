@@ -5,7 +5,7 @@
     "id": "tool-sentiment-analysis",
     "name": "AI-Powered Product Review Sentiment Analysis and Response with Human in the Loop",
     "description": "Uses an AI agent to analyze customer product reviews, assign sentiment-based star ratings, and draft responses for negative reviews. Low-rated reviews are automatically escalated for a human analyst who can approve, edit, or reject the drafted response before it's sent.",
-    "category": "ai",
+    "category": ["ai"],
     "tags": [
       "sentiment",
       "tool",

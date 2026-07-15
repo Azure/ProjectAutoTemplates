@@ -5,7 +5,7 @@
     "id": "tool-invoice-flow",
     "name": "Invoice Processing Flow with Agent",
     "description": "Accepts a request to process invoice using an agent with tools.",
-    "category": "ai",
+    "category": ["ai"],
     "tags": [
       "invoice",
       "tool",
