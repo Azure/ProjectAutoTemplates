@@ -1,0 +1,16 @@
+{
+  "name": "project-auto-templates",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Validation tooling for Project Auto templates",
+  "scripts": {
+    "test": "tsx validate_templates.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
+    "zod": "^3.25.76"
+  }
+}

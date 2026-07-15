@@ -1,0 +1,175 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-get-weather-msn",
+    "name": "Get Weather via MSN Weather",
+    "description": "Retrieves the weather forecast for today using the MSN Weather API. Designed to be triggered by an HTTP request and to provide weather information for a given location.",
+    "category": "automation",
+    "tags": [
+      "weather",
+      "msn",
+      "monitoring"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "Location for the weather"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Get_forecast_for_today": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/msnweather",
+              "operationId": "TodaysForecast",
+              "connection": {
+                "referenceName": "msnweather_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/forecast/today/${encodeURIComponent(triggerBody()?.['location'])}",
+            "queries": {
+              "units": "I"
+            }
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/forecast/today/{Location}"
+          },
+          "runAfter": {}
+        },
+        "Response": {
+          "type": "Response",
+          "kind": "Http",
+          "inputs": {
+            "statusCode": 200,
+            "body": "${body('Get_forecast_for_today')}"
+          },
+          "runAfter": {
+            "Get_forecast_for_today": [
+              "SUCCEEDED"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "location": "Seattle, WA"
+      }
+    }
+  },
+  "mocks": {
+    "Get_forecast_for_today": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "responses": {
+            "daily": {
+              "day": {
+                "cap": "Sunny",
+                "pvdrCap": "Sunny",
+                "pvdrWindDir": "309",
+                "pvdrWindSpd": "2",
+                "icon": 1,
+                "symbol": "d0000",
+                "pvdrIcon": "1",
+                "urlIcon": "http://img-s-msn-com.akamaized.net/tenant/amp/entityid/AAehR3S.img",
+                "precip": 2,
+                "sky": "CLR",
+                "windDir": 309,
+                "windSpd": 2,
+                "summary": "Expect sunny skies. The high will be 79°.",
+                "summaries": [
+                  "Expect sunny skies.",
+                  " The high will be 79°."
+                ],
+                "wx": ""
+              },
+              "night": {
+                "cap": "Clear",
+                "pvdrCap": "Clear",
+                "pvdrWindDir": "141",
+                "pvdrWindSpd": "2",
+                "icon": 28,
+                "symbol": "n0000",
+                "pvdrIcon": "28",
+                "urlIcon": "http://img-s-msn-com.akamaized.net/tenant/amp/entityid/AAehwh2.img",
+                "precip": 2,
+                "sky": "CLR",
+                "windDir": 141,
+                "windSpd": 2,
+                "summary": "The skies will be clear. The low will be 51°.",
+                "summaries": [
+                  "The skies will be clear.",
+                  " The low will be 51°."
+                ],
+                "wx": ""
+              },
+              "pvdrCap": "Sunny",
+              "pvdrWindDir": "141",
+              "pvdrWindSpd": "2",
+              "precip": 2,
+              "windMax": 2,
+              "windMaxDir": 141,
+              "windTh": 13.6,
+              "rhHi": 97,
+              "rhLo": 39,
+              "tempHi": 79,
+              "tempLo": 51,
+              "uv": 8,
+              "uvDesc": "Very High",
+              "rainAmount": 0,
+              "snowAmount": 0
+            }
+          },
+          "units": {
+            "system": "Imperial",
+            "pressure": "in",
+            "temperature": "°F",
+            "speed": "mph",
+            "height": "in",
+            "distance": "mi",
+            "time": "s"
+          }
+        }
+      }
+    }
+  },
+  "connections": {
+    "msnweather_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/msnweather"
+    }
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "order-validation",
+    "name": "HTTP-Triggered Order Approval Workflow",
+    "description": "Automatically approves or rejects incoming orders based on region and amount. Orders from the US exceeding $100 are approved; all others are rejected with a reason. Triggered via HTTP POST.",
+    "category": "automation",
+    "tags": [
+      "http",
+      "validation",
+      "orders",
+      "condition"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "method": "POST",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "orderId": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "region": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "orderId",
+                "amount",
+                "region"
+              ]
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "ParseOrder": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "${triggerBody()}",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "orderId": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "region": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "orderId",
+                "amount",
+                "region"
+              ]
+            }
+          }
+        },
+        "CheckApproval": {
+          "type": "If",
+          "runAfter": {
+            "ParseOrder": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greater": [
+                  "${body('ParseOrder')?.['amount']}",
+                  100
+                ]
+              },
+              {
+                "equals": [
+                  "${body('ParseOrder')?.['region']}",
+                  "US"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Approve": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "status": "approved",
+                  "orderId": "${body('ParseOrder')?.['orderId']}"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Reject": {
+                "type": "Response",
+                "inputs": {
+                  "statusCode": 400,
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "status": "rejected",
+                    "orderId": "${body('ParseOrder')?.['orderId']}",
+                    "reason": "Order did not meet approval criteria. It must be a US order with amount greater than 100."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      },
+      "body": {
+        "orderId": "o3",
+        "amount": 150,
+        "region": "EU"
+      }
+    }
+  },
+  "mocks": {
+    "Approve": {
+      "runForReal": true
+    },
+    "Reject": {
+      "runForReal": true
+    }
+  },
+  "connections": {}
+}

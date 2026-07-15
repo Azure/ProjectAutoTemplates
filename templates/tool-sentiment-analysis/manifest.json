@@ -1,0 +1,233 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-sentiment-analysis",
+    "name": "AI-Powered Product Review Sentiment Analysis and Response with Human in the Loop",
+    "description": "Uses an AI agent to analyze customer product reviews, assign sentiment-based star ratings, and draft responses for negative reviews. Low-rated reviews are automatically escalated for a human analyst who can approve, edit, or reject the drafted response before it's sent.",
+    "category": "ai",
+    "tags": [
+      "sentiment",
+      "tool",
+      "agent"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "Start": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Analyze_Product_Reviews": {
+          "type": "Agent",
+          "inputs": {
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            },
+            "parameters": {
+              "agentModelSettings": {
+                "deploymentModelProperties": {
+                  "name": "gpt-4.1",
+                  "format": "OpenAI",
+                  "version": "2025-12-11"
+                },
+                "agentHistoryReductionSettings": {
+                  "agentHistoryReductionType": "maximumTokenCountReduction",
+                  "maximumTokenCount": 128000
+                }
+              },
+              "messages": [
+                {
+                  "role": "System",
+                  "content": "You are a Product Review Agent for Zava Coffee Grinders. Your job is to analyze customer reviews, assign a sentiment-based star rating, and — when a review is negative — draft a response for human analyst approval before it's sent.\n\n## Your Responsibilities\n### Step 1: Analyze Sentiment\nRead the customer review carefully. Identify:\n- Overall tone (positive, mixed, negative)\n- Specific praise or complaints (e.g. grind consistency, noise level, build quality, ease of use, value, durability)\n- Emotional intensity (mild frustration vs. very upset)\n\n### Step 2: Assign a Rating (1–5 stars)\nMap sentiment to a rating:\n- ⭐⭐⭐⭐⭐ (5): Enthusiastic praise, no real complaints\n- ⭐⭐⭐⭐ (4): Mostly positive, minor issues mentioned\n- ⭐⭐⭐ (3): Mixed — clear positives AND negatives\n- ⭐⭐ (2): Mostly negative, some small redeeming qualities\n- ⭐ (1): Strongly negative, major product/service failure\n\n### Step 3: Determine if Human Review is Needed\n**Trigger human review if rating is 2 stars or below (≤ 2).**\nIf rating is 3 or above:\n→ Output: sentiment summary + rating only. No response needed.\nIf rating is 1 or 2:\n→ Proceed to Step 4.\n\n### Step 4: Draft a Response (for Human Analyst Approval)\nWrite a customer-facing response that:\n1. Acknowledges the specific issue the customer raised (don't be generic)\n2. Apologizes sincerely without being defensive\n3. Offers a concrete next step (refund, replacement, support contact, or investigation)\n4. Keeps a warm, professional tone — never dismissive\n→ Proceed to Step 5.\n\n### Step 5: Send the draft response for human review \n\n\n## Tone Guidelines\n- Empathetic and brand-consistent\n- Never blame the customer\n- Never make promises you can't keep (e.g., \"We'll fix this immediately\")\n- Match the customer's language register — if they're casual, be warm; if formal, be professional"
+                },
+                {
+                  "role": "User",
+                  "content": "Here is a customer review\n\n\n {\n    \"review_id\": \"R004\",\n    \"reviewer\": \"DisappointedDave99\",\n    \"date\": \"2026-06-08\",\n    \"review\": \"Really frustrated with this purchase. The grinder stopped working after just 6 weeks. The motor just gave out completely — no warning. I contacted customer support and waited 5 days without a response. Spent $120 on this and it's now a paperweight. Very disappointed.\"\n\n  }"
+                }
+              ],
+              "agentModelType": "AzureOpenAI",
+              "deploymentId": "gpt-4.1"
+            }
+          },
+          "runAfter": {
+            "Reviews_Sample": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "count": 60,
+            "timeout": "PT1H"
+          },
+          "tools": {
+            "Post_for_Human_Review": {
+              "actions": {
+                "Post_for_Human_Review": {
+                  "type": "ApiConnectionWebhook",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/managedApis/teams",
+                      "operationId": "PostCardAndWaitForResponse",
+                      "connection": {
+                        "referenceName": "teams_#workflowname#"
+                      }
+                    },
+                    "path": "/v1.0/teams/conversation/gatherinput/poster/${encodeURIComponent('Flow bot')}/location/${encodeURIComponent('Channel')}/$subscriptions",
+                    "body": {
+                      "notificationUrl": "${listCallbackUrl()}",
+                      "body": {
+                        "messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"⚠️ Review Needs Your Approval\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\"\n    },\n    {\n      \"type\": \"FactSet\",\n      \"facts\": [\n        { \"title\": \"Review ID\", \"value\": \"@{agentParameters('ReviewID')}\" },\n        { \"title\": \"Reviewer\", \"value\": \"@{agentParameters('ReviewName')}\" },\n        { \"title\": \"Rating\", \"value\": \"⭐ @{agentParameters('ReviewRating')}\" }\n      ]\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Customer Review\",\n      \"weight\": \"Bolder\",\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"@{agentParameters('CustomerReview')}\",\n      \"wrap\": true,\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Drafted Response\",\n      \"weight\": \"Bolder\",\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"@{agentParameters('AgentResponse')}\",\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Input.Text\",\n      \"id\": \"analyst_notes\",\n      \"placeholder\": \"Add notes or edits (optional)...\",\n      \"isMultiline\": true,\n      \"spacing\": \"Small\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"Approve & Send\",\n      \"data\": {\n        \"action\": \"approve\"\n      }\n    },\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"Edit & Resubmit\",\n      \"data\": {\n        \"action\": \"edit\"\n      }\n    },\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"Reject\",\n      \"data\": {\n        \"action\": \"reject\"\n      }\n    }\n  ]\n}",
+                        "updateMessage": "Thanks for your response!",
+                        "recipient": {
+                          "groupId": "",
+                          "channelId": ""
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Use this tool to get human review on the response",
+              "agentParameterSchema": {
+                "type": "object",
+                "properties": {
+                  "ReviewRating": {
+                    "type": "string",
+                    "description": "Rating of the Review"
+                  },
+                  "ReviewName": {
+                    "type": "string",
+                    "description": "Name of Reviewer"
+                  },
+                  "ReviewSentiment": {
+                    "type": "string",
+                    "description": "Sentiment of the Review"
+                  },
+                  "CustomerReview": {
+                    "type": "string",
+                    "description": "Review from the Customer"
+                  },
+                  "AgentResponse": {
+                    "type": "string",
+                    "description": "Response from the Agent"
+                  },
+                  "ReviewID": {
+                    "type": "string",
+                    "description": "Review ID"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "Reviews_Sample": {
+          "type": "Compose",
+          "inputs": [
+            {
+              "review_id": "R001",
+              "reviewer": "CoffeeCrafter_Jake",
+              "date": "2026-06-01",
+              "review": "Absolutely love this grinder! I've been using it every morning for 3 months and the grind consistency is outstanding — my espresso shots have never been better. Super easy to clean too. Worth every penny."
+            },
+            {
+              "review_id": "R002",
+              "reviewer": "MorningBrew_Sarah",
+              "date": "2026-06-03",
+              "review": "Pretty good grinder overall. The grind settings are great and it handles light and dark roasts well. It's a little louder than I expected at 6am, but not a dealbreaker. My partner disagrees though. Would still recommend."
+            },
+            {
+              "review_id": "R003",
+              "reviewer": "HomeBaristaFan",
+              "date": "2026-06-05",
+              "review": "Decent grinder for the price. Grind quality is okay — better than a blade grinder for sure, but I've noticed the coarser settings aren't as consistent as I'd like for French press. Customer support was helpful when I called though."
+            },
+            {
+              "review_id": "R004",
+              "reviewer": "DisappointedDave99",
+              "date": "2026-06-08",
+              "review": "Really frustrated with this purchase. The grinder stopped working after just 6 weeks. The motor just gave out completely — no warning. I contacted customer support and waited 5 days without a response. Spent $120 on this and it's now a paperweight. Very disappointed."
+            },
+            {
+              "review_id": "R005",
+              "reviewer": "AngryAspresso",
+              "date": "2026-06-10",
+              "review": "WORST PURCHASE OF THE YEAR. The hopper cracked on day 3 of use. Coffee grounds are getting into the mechanism and now the whole unit smells burnt. I asked for a replacement and was told I voided the warranty because I used dark roast beans — which is absolutely insane. This is a COFFEE GRINDER. Do not buy. I'm disputing the charge with my credit card company."
+            },
+            {
+              "review_id": "R006",
+              "reviewer": "QuietMorningNina",
+              "date": "2026-06-11",
+              "review": "I bought this as a gift for my husband and he uses it every single day. The burr grind quality is excellent for pour-over and he says it's changed his morning routine completely. Shipping was fast too. Five stars from our household!"
+            },
+            {
+              "review_id": "R007",
+              "reviewer": "JustOkayGrinder",
+              "date": "2026-06-13",
+              "review": "It's fine. Does what a grinder should do. Nothing remarkable but nothing terrible. I switched from a cheaper model and can tell a small difference in taste. The dial feels a bit flimsy and I'm not sure it'll last years, but for now it works."
+            }
+          ]
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "Start",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      }
+    }
+  },
+  "mocks": {
+    "Post_for_Human_Review": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "responder": {
+            "objectId": "userObjectId",
+            "tenantId": "tenantId",
+            "email": "user@example.com",
+            "userPrincipalName": "user@example.com",
+            "displayName": "User Name"
+          },
+          "submitActionId": "Approve & Send",
+          "messageId": "1781853272859",
+          "messageLink": "https://teams.microsoft.com/l/message/19:f79df695687141348f95d044ad4a2648@thread.skype/1781853272859",
+          "data": {
+            "action": "approve"
+          }
+        }
+      }
+    }
+  },
+  "connections": {
+    "teams_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/teams"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    }
+  }
+}

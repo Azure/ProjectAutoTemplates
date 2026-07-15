@@ -1,0 +1,867 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-expense-report",
+    "name": "Automated Expense Report Analysis and Email Summary",
+    "description": "An agentic workflow that retrieves an Excel expense report, converts it to structured text using Azure AI Document Intelligence, and analyzes it with an AI agent. The agent tallies all line items, flags expenses that exceed a configurable threshold for manager approval, and sends a formatted HTML summary via email.",
+    "category": [
+      "ai",
+      "automation"
+    ],
+    "tags": [
+      "tool",
+      "expense",
+      "agent"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Convert_Excel_To_Text": {
+          "type": "ApiConnection",
+          "inputs": {
+            "method": "post",
+            "host": {
+              "apiId": "/managedApis/formrecognizer",
+              "operationId": "AnalyzeDocumentV40",
+              "connection": {
+                "referenceName": "formrecognizer_#workflowname#"
+              }
+            },
+            "path": "/connectorinternaldocumentintelligence/documentModels/${encodeURIComponent('')}:analyze",
+            "queries": {
+              "api-version": "2024-11-30",
+              "outputContentFormat": "markdown"
+            },
+            "body": "${body('Get_Expense_Report')}"
+          },
+          "runAfter": {
+            "Get_Expense_Report": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Expense_Review_Agent": {
+          "type": "Agent",
+          "inputs": {
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            },
+            "parameters": {
+              "deploymentId": "gpt-4.1",
+              "messages": [
+                {
+                  "role": "System",
+                  "content": "You are an autonomous Expense Review Agent for Contoso Corp.\n\nWhen given an employee expense report, you will:\n1. Tally the total of all expense line items\n2. Flag any item over $1,000 as requiring manager approval\n3. Send an email with the summary \n\nEmail should follow this exact structure in HTML format\n\nExpense Review — [Employee Name], [Month]\n| # | Description | Category | Amount | Status |\n|---|-------------|----------|--------|--------|\n| 1 | ... | ... | $XXX.XX | OK |\n| 2 | ... | ... | $X,XXX.XX | FLAGGED — exceeds $1,000 limit |\n\nTotal Expenses Submitted: $X,XXX.XX\nItems Flagged for Approval: X item(s)\n\nIf any items flagged: The following items exceed the $1,000 threshold and require manager approval before reimbursement: [list them]\nIf no items flagged: All items are within the $1,000 limit. Report is clear for processing.\n\nRULES:\n- Do not ask clarifying questions, just process and respond\n- Flag any single line item where Amount > $1,000\n- Calculate the total accurately\n- Keep the tone professional and concise"
+                },
+                {
+                  "role": "User",
+                  "content": "Analyze this expense report ${body('Convert_Excel_To_Text')}"
+                }
+              ],
+              "agentModelSettings": {
+                "deploymentModelProperties": {
+                  "name": "gpt-4.1",
+                  "format": "OpenAI",
+                  "version": "2025-04-14"
+                },
+                "agentHistoryReductionSettings": {
+                  "agentHistoryReductionType": "maximumTokenCountReduction",
+                  "maximumTokenCount": 128000
+                }
+              },
+              "agentModelType": "AzureOpenAI"
+            }
+          },
+          "runAfter": {
+            "Convert_Excel_To_Text": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "count": 60,
+            "timeout": "PT1H"
+          },
+          "tools": {
+            "Email_Expense_Report_Summary": {
+              "actions": {
+                "Send_Email": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "method": "post",
+                    "host": {
+                      "apiId": "/managedApis/outlook",
+                      "operationId": "SendEmailV2",
+                      "connection": {
+                        "referenceName": "outlook_#workflowname#"
+                      }
+                    },
+                    "path": "/v2/Mail",
+                    "body": {
+                      "To": "",
+                      "Subject": "${agentParameters('Subject')}",
+                      "Body": "<p class=\"editor-paragraph\">${agentParameters('Body')}</p>",
+                      "Importance": "Normal"
+                    }
+                  }
+                }
+              },
+              "description": "Use this tool to email expense report summary ",
+              "agentParameterSchema": {
+                "type": "object",
+                "properties": {
+                  "Subject": {
+                    "type": "string",
+                    "description": "Specify the subject of the mail"
+                  },
+                  "Body": {
+                    "type": "string",
+                    "description": "Specify the body of the mail"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Get_Expense_Report": {
+          "type": "Http",
+          "inputs": {
+            "uri": "",
+            "method": "GET"
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      }
+    }
+  },
+  "mocks": {
+    "Convert_Excel_To_Text": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "status": "succeeded",
+          "createdDateTime": "2026-06-24T18:38:53Z",
+          "lastUpdatedDateTime": "2026-06-24T18:38:53Z",
+          "analyzeResult": {
+            "apiVersion": "2024-11-30",
+            "modelId": "prebuilt-layout",
+            "stringIndexType": "textElements",
+            "content": "# Expense Report\n\nEMPLOYEE EXPENSE REPORT — May 2026\n\nContoso Corp | Employee: Sampl Employ | Dept: Engineering\n\n\\#\n\nDescription\n\nCategory\n\nAmount ($)\n\n1\n\nFlight to NYC — JetBlue\n\nTravel\n\n480\n\n2\n\nHotel — Marriott NYC, 3 nights\n\nHotel\n\n1125\n\n3\n\nTeam dinner — 8 people\n\nMeals\n\n620\n\n4\n\nTOTAL\n",
+            "pages": [
+              {
+                "pageNumber": 1,
+                "words": [
+                  {
+                    "content": "Expense",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 2,
+                      "length": 7
+                    }
+                  },
+                  {
+                    "content": "Report",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 10,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "EMPLOYEE",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 18,
+                      "length": 8
+                    }
+                  },
+                  {
+                    "content": "EXPENSE",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 27,
+                      "length": 7
+                    }
+                  },
+                  {
+                    "content": "REPORT",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 35,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "—",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 42,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "May",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 44,
+                      "length": 3
+                    }
+                  },
+                  {
+                    "content": "2026",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 48,
+                      "length": 4
+                    }
+                  },
+                  {
+                    "content": "Contoso",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 54,
+                      "length": 7
+                    }
+                  },
+                  {
+                    "content": "Corp",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 62,
+                      "length": 4
+                    }
+                  },
+                  {
+                    "content": "|",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 67,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "Employee:",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 69,
+                      "length": 9
+                    }
+                  },
+                  {
+                    "content": "Sampl",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 79,
+                      "length": 5
+                    }
+                  },
+                  {
+                    "content": "Employ",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 85,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "|",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 92,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "Dept:",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 94,
+                      "length": 5
+                    }
+                  },
+                  {
+                    "content": "Engineering",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 100,
+                      "length": 11
+                    }
+                  },
+                  {
+                    "content": "#",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 113,
+                      "length": 2
+                    }
+                  },
+                  {
+                    "content": "Description",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 117,
+                      "length": 11
+                    }
+                  },
+                  {
+                    "content": "Category",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 130,
+                      "length": 8
+                    }
+                  },
+                  {
+                    "content": "Amount",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 140,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "($)",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 147,
+                      "length": 3
+                    }
+                  },
+                  {
+                    "content": "1",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 152,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "Flight",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 155,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "to",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 162,
+                      "length": 2
+                    }
+                  },
+                  {
+                    "content": "NYC",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 165,
+                      "length": 3
+                    }
+                  },
+                  {
+                    "content": "—",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 169,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "JetBlue",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 171,
+                      "length": 7
+                    }
+                  },
+                  {
+                    "content": "Travel",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 180,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "480",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 188,
+                      "length": 3
+                    }
+                  },
+                  {
+                    "content": "2",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 193,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "Hotel",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 196,
+                      "length": 5
+                    }
+                  },
+                  {
+                    "content": "—",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 202,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "Marriott",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 204,
+                      "length": 8
+                    }
+                  },
+                  {
+                    "content": "NYC,",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 213,
+                      "length": 4
+                    }
+                  },
+                  {
+                    "content": "3",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 218,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "nights",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 220,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "Hotel",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 228,
+                      "length": 5
+                    }
+                  },
+                  {
+                    "content": "1125",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 235,
+                      "length": 4
+                    }
+                  },
+                  {
+                    "content": "3",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 241,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "Team",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 244,
+                      "length": 4
+                    }
+                  },
+                  {
+                    "content": "dinner",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 249,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "—",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 256,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "8",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 258,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "people",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 260,
+                      "length": 6
+                    }
+                  },
+                  {
+                    "content": "Meals",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 268,
+                      "length": 5
+                    }
+                  },
+                  {
+                    "content": "620",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 275,
+                      "length": 3
+                    }
+                  },
+                  {
+                    "content": "4",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 280,
+                      "length": 1
+                    }
+                  },
+                  {
+                    "content": "TOTAL",
+                    "confidence": 1,
+                    "span": {
+                      "offset": 283,
+                      "length": 5
+                    }
+                  }
+                ],
+                "spans": [
+                  {
+                    "offset": 0,
+                    "length": 289
+                  }
+                ]
+              }
+            ],
+            "paragraphs": [
+              {
+                "spans": [
+                  {
+                    "offset": 0,
+                    "length": 16
+                  }
+                ],
+                "role": "title",
+                "content": "Expense Report"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 18,
+                    "length": 34
+                  }
+                ],
+                "content": "EMPLOYEE EXPENSE REPORT — May 2026"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 54,
+                    "length": 57
+                  }
+                ],
+                "content": "Contoso Corp | Employee: Sampl Employ | Dept: Engineering"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 113,
+                    "length": 2
+                  }
+                ],
+                "content": "#"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 117,
+                    "length": 11
+                  }
+                ],
+                "content": "Description"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 130,
+                    "length": 8
+                  }
+                ],
+                "content": "Category"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 140,
+                    "length": 10
+                  }
+                ],
+                "content": "Amount ($)"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 152,
+                    "length": 1
+                  }
+                ],
+                "content": "1"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 155,
+                    "length": 23
+                  }
+                ],
+                "content": "Flight to NYC — JetBlue"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 180,
+                    "length": 6
+                  }
+                ],
+                "content": "Travel"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 188,
+                    "length": 3
+                  }
+                ],
+                "content": "480"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 193,
+                    "length": 1
+                  }
+                ],
+                "content": "2"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 196,
+                    "length": 30
+                  }
+                ],
+                "content": "Hotel — Marriott NYC, 3 nights"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 228,
+                    "length": 5
+                  }
+                ],
+                "content": "Hotel"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 235,
+                    "length": 4
+                  }
+                ],
+                "content": "1125"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 241,
+                    "length": 1
+                  }
+                ],
+                "content": "3"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 244,
+                    "length": 22
+                  }
+                ],
+                "content": "Team dinner — 8 people"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 268,
+                    "length": 5
+                  }
+                ],
+                "content": "Meals"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 275,
+                    "length": 3
+                  }
+                ],
+                "content": "620"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 280,
+                    "length": 1
+                  }
+                ],
+                "content": "4"
+              },
+              {
+                "spans": [
+                  {
+                    "offset": 283,
+                    "length": 5
+                  }
+                ],
+                "content": "TOTAL"
+              }
+            ],
+            "contentFormat": "markdown",
+            "sections": [
+              {
+                "spans": [
+                  {
+                    "offset": 0,
+                    "length": 288
+                  }
+                ],
+                "elements": [
+                  "/paragraphs/0",
+                  "/paragraphs/1",
+                  "/paragraphs/2",
+                  "/paragraphs/3",
+                  "/paragraphs/4",
+                  "/paragraphs/5",
+                  "/paragraphs/6",
+                  "/paragraphs/7",
+                  "/paragraphs/8",
+                  "/paragraphs/9",
+                  "/paragraphs/10",
+                  "/paragraphs/11",
+                  "/paragraphs/12",
+                  "/paragraphs/13",
+                  "/paragraphs/14",
+                  "/paragraphs/15",
+                  "/paragraphs/16",
+                  "/paragraphs/17",
+                  "/paragraphs/18",
+                  "/paragraphs/19",
+                  "/paragraphs/20"
+                ]
+              }
+            ]
+          }
+        },
+        "headers": {
+          "Transfer-Encoding": "chunked",
+          "Vary": "Accept-Encoding",
+          "Content-Type": "application/json; charset=utf-8"
+        }
+      }
+    },
+    "Send_Email": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200"
+      }
+    },
+    "Get_Expense_Report": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "$content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "$content": "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"
+        },
+        "headers": {
+          "Accept-Ranges": "bytes",
+          "Server": "Windows-Azure-Blob/1.0,Microsoft-HTTPAPI/2.0"
+        }
+      }
+    }
+  },
+  "notes": {
+    "1308d3c1-b8f6-4914-a036-2a29f32b706c": {
+      "content": "The sample expense report in this workflow is a snippet from the report available at Logic Apps GitHub repo here - https://github.com/Azure/logicapps/blob/master/templates-artifacts/Automation_Expense_Report_Simple.xlsx\n\n\nSample files can come from a REST endpoint like in this template, or via storage, sharepoint or any other source",
+      "color": "#FFFBCC",
+      "metadata": {
+        "position": {
+          "x": 144,
+          "y": -167
+        },
+        "width": 513,
+        "height": 154
+      }
+    }
+  },
+  "connections": {
+    "formrecognizer_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/formrecognizer"
+    },
+    "outlook_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/outlook"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    }
+  }
+}

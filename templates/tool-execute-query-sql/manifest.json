@@ -1,0 +1,115 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-execute-query-sql",
+    "name": "SQL Query Executor",
+    "description": "Accepts an HTTP request containing a SQL query, executes it against a configured SQL Server database, and returns the result set. Designed as an AI-agent tool for data retrieval.",
+    "category": "automation",
+    "tags": [
+      "sql",
+      "database",
+      "query",
+      "tool"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "sql_query": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sql_query"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Execute_a_SQL_query": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "sql_#workflowname#"
+              }
+            },
+            "method": "post",
+            "path": "/v2/datasets/,/query/sql",
+            "body": "$triggerBody()?.['sql_query']"
+          },
+          "runAfter": {}
+        },
+        "Response": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "$body('Execute_a_SQL_query')"
+          },
+          "runAfter": {
+            "Execute_a_SQL_query": [
+              "SUCCEEDED"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "tenantId": "t1"
+      },
+      "body": {
+        "sql_query": "SELECT TOP 10 * FROM Customers"
+      }
+    }
+  },
+  "mocks": {
+    "Execute_a_SQL_query": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "resultSets": {
+            "Table1": [
+              {
+                "Id": 1,
+                "Name": "Contoso"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "connections": {
+    "sql_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/sql"
+    }
+  }
+}

@@ -1,0 +1,600 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "tool-invoice-flow",
+    "name": "Invoice Processing Flow with Agent",
+    "description": "Accepts a request to process invoice using an agent with tools.",
+    "category": "ai",
+    "tags": [
+      "invoice",
+      "tool",
+      "agent"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "InvokeProcess": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Get_Invoice": {
+          "type": "Http",
+          "inputs": {
+            "uri": "",
+            "method": "GET"
+          },
+          "runAfter": {
+            "Create_Ticket": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Invoice_Validation_Agent": {
+          "type": "Agent",
+          "inputs": {
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            },
+            "parameters": {
+              "messages": [
+                {
+                  "role": "System",
+                  "content": " Validate incoming invoices against purchase orders and vendor records, flag discrepancies, and send appropriate notifications.\n\n\n WORKFLOW:\n 1. Extract data from the incoming invoice\n 2. Lookup PO and Vendor from databases\n 3. Apply validation rules\n 4. Send notification with outcome and summary\n\n OUTPUT:\nReturn validation result (Approved, Rejected,  Blocked) with details on what passed, what failed, and recommended action.\n\nAlso return output as this JSON \n\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"outcome\": {\n      \"type\": \"string\",\n      \"enum\": [\"approved\", \"blocked\", \"rejected\"]\n    }\n  },\n  \"required\": [\"outcome\"]\n}\n\n"
+                }
+              ],
+              "agentModelType": "AzureOpenAI",
+              "deploymentId": "gpt-4.1",
+              "agentModelSettings": {
+                "deploymentModelProperties": {
+                  "name": "gpt-4.1",
+                  "format": "OpenAI",
+                  "version": "2025-04-14"
+                },
+                "agentHistoryReductionSettings": {
+                  "agentHistoryReductionType": "maximumTokenCountReduction",
+                  "maximumTokenCount": 128000
+                },
+                "agentHarness": {
+                  "type": "GHCP",
+                  "inputFiles": [
+                    {
+                      "name": "Invoice.csv",
+                      "content": "${body('Get_Invoice')}",
+                      "contentType": "text/csv"
+                    },
+                    {
+                      "name": "Approval.md",
+                      "content": "${body('GetApprovalRules')}",
+                      "contentType": "text/markdown"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "GetApprovalRules": [
+              "Succeeded"
+            ],
+            "GetNotificationSkill": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "count": 60,
+            "timeout": "PT1H"
+          },
+          "tools": {
+            "GetOrderDetails": {
+              "actions": {
+                "GetOrderDetails": {
+                  "type": "ServiceProvider",
+                  "inputs": {
+                    "serviceProviderConfiguration": {
+                      "serviceProviderId": "/serviceProviders/sql",
+                      "operationId": "getRows",
+                      "connectionName": "sql_#workflowname#"
+                    },
+                    "parameters": {
+                      "tableName": ""
+                    }
+                  }
+                }
+              },
+              "description": "Returns the Order Details required to validate the Invoices"
+            },
+            "GetVendorDetails": {
+              "actions": {
+                "Get_rows_V2_Action": {
+                  "type": "ServiceProvider",
+                  "inputs": {
+                    "serviceProviderConfiguration": {
+                      "serviceProviderId": "/serviceProviders/sql",
+                      "operationId": "getRowsV2",
+                      "connectionName": "sql_#workflowname#"
+                    },
+                    "parameters": {
+                      "tableName": ""
+                    }
+                  }
+                }
+              },
+              "description": "Returns Vendor Details required to validate the incoming Invoice and the Vendor standing"
+            },
+            "Notify": {
+              "actions": {
+                "Notify": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "method": "post",
+                    "host": {
+                      "apiId": "/managedApis/outlook",
+                      "operationId": "SendEmailV2",
+                      "connection": {
+                        "referenceName": "outlook_#workflowname#"
+                      }
+                    },
+                    "path": "/v2/Mail",
+                    "body": {
+                      "To": "ContosoGoods@outlook.com",
+                      "Subject": "@agentParameters('Subject')",
+                      "Body": "@agentParameters('Message')"
+                    }
+                  }
+                }
+              },
+              "description": "Use this tool to send email and notify all stakeholders",
+              "agentParameterSchema": {
+                "type": "object",
+                "properties": {
+                  "Subject": {
+                    "type": "string",
+                    "description": "Subject of the email"
+                  },
+                  "Message": {
+                    "type": "string",
+                    "description": "Body of the Email nicely formatted in HTML"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "GetApprovalRules": {
+          "type": "Http",
+          "inputs": {
+            "uri": "",
+            "method": "GET"
+          },
+          "runAfter": {
+            "Get_Invoice": [
+              "Succeeded"
+            ]
+          }
+        },
+        "GetNotificationSkill": {
+          "type": "Http",
+          "inputs": {
+            "uri": "",
+            "method": "GET"
+          },
+          "runAfter": {
+            "Get_Invoice": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Create_Ticket": {
+          "type": "ApiConnection",
+          "inputs": {
+            "method": "post",
+            "host": {
+              "apiId": "/managedApis/service-now",
+              "operationId": "CreateRecord",
+              "connection": {
+                "referenceName": "service-now_#workflowname#"
+              }
+            },
+            "path": "/api/now/v2/table/${encodeURIComponent('')}",
+            "queries": {
+              "sysparm_display_value": false,
+              "sysparm_exclude_reference_link": true
+            }
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/api/now/v2/table/{tableType}"
+          }
+        },
+        "Condition": {
+          "type": "If",
+          "runAfter": {
+            "Invoice_Validation_Agent": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@equals(1, 1)",
+          "actions": {
+            "Update_CRM": {
+              "type": "ApiConnection",
+              "inputs": {
+                "method": "get",
+                "host": {
+                  "apiId": "/managedApis/salesforce",
+                  "operationId": "GetItems",
+                  "connection": {
+                    "referenceName": "salesforce_#workflowname#"
+                  }
+                },
+                "path": "/datasets/default/tables/${encodeURIComponent(encodeURIComponent(''))}/items"
+              },
+              "metadata": {
+                "swaggerPathTemplate": "/{connectionId}/datasets/default/tables/{table}/items"
+              }
+            },
+            "Close_Ticket": {
+              "type": "ApiConnection",
+              "inputs": {
+                "method": "get",
+                "host": {
+                  "apiId": "/managedApis/service-now",
+                  "operationId": "GetRecords",
+                  "connection": {
+                    "referenceName": "service-now_#workflowname#"
+                  }
+                },
+                "path": "/api/now/v2/table/${encodeURIComponent('')}",
+                "queries": {
+                  "sysparm_display_value": false,
+                  "sysparm_exclude_reference_link": true
+                }
+              },
+              "runAfter": {
+                "Update_CRM": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "swaggerPathTemplate": "/{connectionId}/api/now/v2/table/{tableType}"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Archive_document": {
+                "type": "ServiceProvider",
+                "inputs": {
+                  "serviceProviderConfiguration": {
+                    "serviceProviderId": "/serviceProviders/AzureBlob",
+                    "operationId": "listContainers",
+                    "connectionName": "AzureBlob_#workflowname#"
+                  },
+                  "parameters": {}
+                }
+              },
+              "Update_Ticket": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "method": "get",
+                  "host": {
+                    "apiId": "/managedApis/service-now",
+                    "operationId": "GetRecords",
+                    "connection": {
+                      "referenceName": "service-now_#workflowname#"
+                    }
+                  },
+                  "path": "/api/now/v2/table/${encodeURIComponent('')}",
+                  "queries": {
+                    "sysparm_display_value": false,
+                    "sysparm_exclude_reference_link": true
+                  }
+                },
+                "runAfter": {
+                  "Archive_document": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "swaggerPathTemplate": "/{connectionId}/api/now/v2/table/{tableType}"
+                }
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "InvokeProcess",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      }
+    }
+  },
+  "mocks": {
+    "Get_Invoice": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": "ACME SUPPLIES INC.,,,,,\n\"1200 Industrial Parkway, Suite 400\",,,,,\n\"Seattle, WA 98101 | (206) 555-8900\",,,,,\naccounts@acmesupplies.com | Tax ID: 91-7734821,,,,,\n,,,,,\nBill To:,Contoso Corporation,,Invoice #:,INV-2026-4471,\n,Attn: Accounts Payable,,Invoice Date:,\"April 15, 2026\",\n,\"500 Main Street, Floor 12\",,Due Date:,\"May 15, 2026\",\n,\"Redmond, WA 98052\",,PO Number:,PO-8832,\n,,,,,\n,,,,,\n#,Description,Qty,Unit Price,Tax,Amount\n1,Ergonomic Office Chair - Model EX-500 (Midnight Black),10,$325.00,10%,\"$3,250.00\"\n2,Height-Adjustable Standing Desk 60x30 (Walnut/White),5,$580.00,10%,\"$2,900.00\"\n3,Dual Monitor Arm - Heavy Duty (27-34 inch),10,$89.99,10%,$899.90\n4,Cable Management Kit - Premium,10,$24.99,10%,$249.90\n5,Desk Organizer Set - Executive (5-piece bamboo),5,$42.00,10%,$210.00\n,,,,,\n,,,,Subtotal:,\"$7,509.80\"\n,,,,Tax:,$750.98\n,,,,TOTAL:,\"$8,260.78\"\n,,,,,\nNotes:,,,,,\nPayment terms: Net 30. Thank you for your business.,,,,,",
+        "headers": {
+          "Accept-Ranges": "bytes",
+          "Server": "Windows-Azure-Blob/1.0,Microsoft-HTTPAPI/2.0",
+          "Content-Length": "933",
+          "Content-Type": "text/csv"
+        }
+      }
+    },
+    "GetOrderDetails": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": [
+          {
+            "PONumber": "PO-8832",
+            "VendorId": "VND-1001",
+            "VendorName": "ACME Supplies Inc.",
+            "VendorTaxId": "91-7734821",
+            "PaymentTerms": "Net 30",
+            "Status": "APPROVED",
+            "CreatedDate": "2026-04-01",
+            "ApprovedDate": "2026-04-02",
+            "ApprovedBy": "Maria Chen",
+            "Department": "Facilities",
+            "CostCenter": "CC-4500",
+            "ShipToAttention": "Facilities Team",
+            "ShipToAddress": "500 Main Street, Floor 12, Redmond, WA 98052",
+            "ExpectedDelivery": "2026-04-20",
+            "IsRushOrder": 0,
+            "TaxRate": 0.1,
+            "BudgetCode": "FURN-2026-Q2",
+            "DiscountPercent": 0,
+            "DiscountReason": null,
+            "DiscountAuthorizedBy": null,
+            "DiscountAuthorizedDate": null,
+            "LineNumber": 1,
+            "SKU": "ACME-EX500-BLK",
+            "Description": "Ergonomic Office Chair - Model EX-500",
+            "Specifications": "Midnight Black, Mesh Back",
+            "Quantity": 10,
+            "UnitPrice": 325,
+            "Unit": "each",
+            "ExtendedPrice": 3250,
+            "IsTaxExempt": 0,
+            "TaxExemptReason": null
+          },
+          {
+            "PONumber": "PO-8832",
+            "VendorId": "VND-1001",
+            "VendorName": "ACME Supplies Inc.",
+            "VendorTaxId": "91-7734821",
+            "PaymentTerms": "Net 30",
+            "Status": "APPROVED",
+            "CreatedDate": "2026-04-01",
+            "ApprovedDate": "2026-04-02",
+            "ApprovedBy": "Maria Chen",
+            "Department": "Facilities",
+            "CostCenter": "CC-4500",
+            "ShipToAttention": "Facilities Team",
+            "ShipToAddress": "500 Main Street, Floor 12, Redmond, WA 98052",
+            "ExpectedDelivery": "2026-04-20",
+            "IsRushOrder": 0,
+            "TaxRate": 0.1,
+            "BudgetCode": "FURN-2026-Q2",
+            "DiscountPercent": 0,
+            "DiscountReason": null,
+            "DiscountAuthorizedBy": null,
+            "DiscountAuthorizedDate": null,
+            "LineNumber": 2,
+            "SKU": "ACME-DESK-6030E",
+            "Description": "Height-Adjustable Standing Desk 60x30",
+            "Specifications": "Electric, Walnut Top, White Frame",
+            "Quantity": 5,
+            "UnitPrice": 580,
+            "Unit": "each",
+            "ExtendedPrice": 2900,
+            "IsTaxExempt": 0,
+            "TaxExemptReason": null
+          },
+          {
+            "PONumber": "PO-8832",
+            "VendorId": "VND-1001",
+            "VendorName": "ACME Supplies Inc.",
+            "VendorTaxId": "91-7734821",
+            "PaymentTerms": "Net 30",
+            "Status": "APPROVED",
+            "CreatedDate": "2026-04-01",
+            "ApprovedDate": "2026-04-02",
+            "ApprovedBy": "Maria Chen",
+            "Department": "Facilities",
+            "CostCenter": "CC-4500",
+            "ShipToAttention": "Facilities Team",
+            "ShipToAddress": "500 Main Street, Floor 12, Redmond, WA 98052",
+            "ExpectedDelivery": "2026-04-20",
+            "IsRushOrder": 0,
+            "TaxRate": 0.1,
+            "BudgetCode": "FURN-2026-Q2",
+            "DiscountPercent": 0,
+            "DiscountReason": null,
+            "DiscountAuthorizedBy": null,
+            "DiscountAuthorizedDate": null,
+            "LineNumber": 3,
+            "SKU": "ACME-MARM-HD",
+            "Description": "Dual Monitor Arm - Heavy Duty",
+            "Specifications": "Supports 27-34 inch displays",
+            "Quantity": 10,
+            "UnitPrice": 89.99,
+            "Unit": "each",
+            "ExtendedPrice": 899.9,
+            "IsTaxExempt": 0,
+            "TaxExemptReason": null
+          }
+        ]
+      }
+    },
+    "Get_rows_V2_Action": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "VendorId": "VND-1001",
+              "VendorName": "ACME Supplies Inc.",
+              "TaxId": "91-7734821",
+              "Status": "Active",
+              "HoldReason": null,
+              "HoldDate": null,
+              "ContractedPaymentTerms": "Net 30",
+              "W9OnFile": true,
+              "W9ReceivedDate": "2024-03-15",
+              "W9ExpirationDate": "2027-03-15",
+              "W9Requested": null,
+              "W8BENOnFile": false,
+              "W8BENReceivedDate": null,
+              "W8BENExpirationDate": null,
+              "WithholdingRate": null,
+              "ApprovedDate": "2023-06-01",
+              "VendorType": "Domestic",
+              "Country": null,
+              "Category": "Office Supplies & Furniture",
+              "PrimaryContact": "Jennifer Adams",
+              "ContactEmail": "jadams@acmesupplies.com",
+              "ContactPhone": "425-555-0101",
+              "Address": "1200 Commerce Way, Seattle, WA 98101",
+              "YTDPayments": 45230,
+              "RelationshipOwner": "Maria Chen",
+              "InactiveReason": null
+            }
+          ]
+        }
+      }
+    },
+    "GetApprovalRules": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": "---\r\nname: invoice-approval-rules\r\ndescription: Invoice validation rules, PO matching conditions, and vendor verification policies for the Contoso Corporation invoice processing workflow.\r\n---\r\n\r\n# Invoice Validation Rules\r\n\r\nYou are responsible for validating invoices against Contoso Corporation's policies. Apply these rules precisely.\r\n\r\n## 1. Purchase Order (PO) Matching Rules\r\n\r\nEvery invoice line item must be validated against a corresponding Purchase Order:\r\n\r\n- **PO Required**: All invoices above $500 must reference a valid PO number.\r\n- **PO Match Tolerance**: Line item amounts may differ from the PO by up to **±5%** and still be considered matched. Flag differences greater than 5% as \"over-budget\" or \"under-budget.\"\r\n- **PO Not Found**: If a referenced PO number does not exist in the system, flag as \"PO Not Found\" and route to the Procurement team for manual PO association before proceeding with approval.\r\n- **No PO Referenced**: If the invoice does not reference any PO and the amount exceeds $500, flag as \"Missing PO\" and route to Procurement. Do not proceed with approval.\r\n- **PO Fully Consumed**: If the PO has already been fully invoiced (cumulative invoices ≥ PO total), flag as \"PO Exhausted\" and route to Procurement for PO amendment or new PO creation.\r\n\r\n## 2. Vendor Validation Rules\r\n\r\nBefore processing, verify the vendor:\r\n\r\n- **Approved Vendor List**: The vendor must exist in Contoso's approved vendor database. If not found, flag as \"Unapproved Vendor\" and route to Vendor Management.\r\n- **Tax ID Verification**: The vendor's Tax ID on the invoice must match the Tax ID on file. Mismatches are flagged as \"Tax ID Mismatch\" and require Vendor Management review.\r\n- **Payment Terms Verification**: Invoice payment terms must match the contracted terms. If the invoice states \"Net 15\" but the contract says \"Net 30,\" flag the discrepancy but use the **contracted terms** for payment scheduling.\r\n- **Vendor on Hold**: If the vendor is currently flagged as \"on hold\" (dispute, compliance issue, etc.), block the invoice from processing and notify Accounts Payable and the vendor relationship owner.\r\n\r\n## 3. Duplicate Detection Rules\r\n\r\nCheck for duplicate invoices before processing:\r\n\r\n- **Exact Duplicate**: Same vendor + same invoice number → reject as duplicate.\r\n- **Probable Duplicate**: Same vendor + same amount + date of service within 7 days → flag for human review (do not auto-reject, as this could be a legitimate recurring charge).\r\n- **Pattern Alert**: Same vendor + 3 or more invoices in a 30-day period with amounts within 10% of each other → flag as \"Unusual Pattern\" for Accounts Payable review.\r\n\r\n## 4. Discount & Adjustment Rules\r\n\r\nWhen an invoice includes discounts or adjustments:\r\n\r\n- **Documented Discount**: If a discount is referenced with supporting documentation (email, verbal agreement note, contract amendment), apply the discount and log the reference. Route to the original PO approver for confirmation if discount exceeds **15%**.\r\n- **Undocumented Discount**: If a discount appears on the invoice without any supporting reference, flag as \"Unverified Discount\" and route to Procurement for verification. Do not apply the discount until confirmed.\r\n- **Handwritten Notes**: If a handwritten note references a discount or adjustment, extract the content, flag as \"Handwritten Adjustment — Requires Verification,\" and include the note's content in the routing. Never auto-apply a discount based solely on a handwritten note.\r\n\r\n## 5. Compliance & Regulatory Checks\r\n\r\n- **W-9 on File**: For US vendors, verify a current W-9 is on file. If missing or expired (older than 3 years), flag and notify Vendor Management. Invoice can proceed but payment is held until W-9 is received.\r\n- **1099 Threshold**: If cumulative payments to a vendor in the calendar year will exceed $600 with this invoice, flag for 1099 tracking.\r\n- **Sales Tax Validation**: Verify tax rates match the expected rate for the vendor's jurisdiction. Flag discrepancies greater than 1 percentage point.\r\n- **International Vendors**: Invoices from non-US vendors require W-8BEN on file and withholding rate verification. Route to Tax team if withholding is uncertain.\r\n\r\n## 6. Expedited / Rush Processing\r\n\r\nIf an invoice is marked as urgent or rush:\r\n\r\n- **Rush Request**: If the invoice or accompanying notes indicate urgency (e.g., \"RUSH\", \"Expedite\", \"Urgent\", \"Need by [date]\"), flag as \"Rush Requested.\"\r\n- **Payment Terms Override**: Rush requests do not override contracted payment terms.\r\n\r\n## 7. Exception Handling\r\n\r\nWhen the agent encounters situations not covered by the above rules:\r\n\r\n- **Low Confidence**: If the agent's extraction confidence on any field is below 85%, flag the specific field as \"Low Confidence — Manual Verification Required\" and route to Accounts Payable.\r\n- **Unreadable Content**: If portions of the invoice are illegible (poor scan, damaged document), list what was extracted vs. what could not be read, and route to Accounts Payable with a request to contact the vendor for a clean copy.\r\n- **Multi-Currency**: If the invoice is in a non-USD currency, flag for Treasury team review to confirm exchange rate and payment currency.\r\n- **Partial Delivery**: If the invoice references items not yet received (per receiving records), flag as \"Pending Receipt Confirmation\" and hold for Warehouse/Receiving verification.\r\n",
+        "headers": {
+          "Accept-Ranges": "bytes",
+          "Server": "Windows-Azure-Blob/1.0,Microsoft-HTTPAPI/2.0",
+          "Content-Length": "5408",
+          "Content-Type": "text/markdown",
+          "Last-Modified": "Tue, 12 May 2026 23:04:08 GMT"
+        }
+      }
+    },
+    "GetNotificationSkill": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": "---\r\nname: approval-notification\r\ndescription: Notification templates and routing logic for invoice approval outcomes — approvals, rejections, escalations, and information requests.\r\n---\r\n\r\n# Approval Notification Skill\r\n\r\nYou are responsible for generating and routing notifications for invoice processing outcomes. Every invoice action must produce a notification to the relevant stakeholders. Notifications must be clear, actionable, and include all context needed for the recipient to act without looking up additional information.\r\n\r\n\r\n## 1. Approval Request Notification\r\n\r\nWhen an invoice requires human approval, send an **Adaptive Card** to the approver via Microsoft Teams with an email fallback.\r\n\r\n### Adaptive Card Content\r\n\r\nThe card must include:\r\n\r\n**Header Section:**\r\n- Title: \"🧾 Invoice Approval Required\"\r\n- Urgency badge: \"🔴 RUSH\" if rush-flagged, otherwise omit\r\n- Approval SLA: \"Please respond by [deadline based on tier SLA]\"\r\n\r\n**Invoice Summary:**\r\n- Vendor name and vendor ID\r\n- Invoice number and date\r\n- PO number (with match status: ✅ Matched, ⚠️ Partial Match, ❌ Not Found)\r\n- Total amount (highlight if above $25,000)\r\n- Payment terms\r\n\r\n**Line Items Table:**\r\n- Item description, quantity, unit price, line total\r\n- PO match status per line (✅ within tolerance, ⚠️ over 5%, ❌ unmatched)\r\n\r\n**Agent Analysis Summary:**\r\n- Extraction confidence score\r\n- Any flags raised (discount verification, tax discrepancy, pattern alert, etc.)\r\n- Handwritten notes detected (if any) — include extracted text\r\n\r\n**Actions:**\r\n- ✅ **Approve** — one-click approve\r\n- ❌ **Reject** — opens a required \"reason\" text field\r\n- 🔄 **Request More Info** — opens a text field to specify what's needed\r\n- ➡️ **Delegate** — allows forwarding to another approver\r\n\r\n### Email Fallback\r\n\r\nIf the approver does not interact with the Teams card within 2 hours, send an email with the same content and a link to approve/reject via the Otto portal.\r\n\r\n## 2. Approval Confirmation Notification\r\n\r\nWhen an invoice is approved (by human or auto-approved by system):\r\n\r\n**Recipients:**\r\n- Accounts Payable team (always) - their email is abc@example.com\r\n- Original requestor / PO owner\r\n\r\n\r\n**Internal notification (AP team + requestor):**\r\n\r\n> **Subject:** ✅ Invoice Approved — [Vendor Name] — [Invoice #]\r\n>\r\n> **Invoice [Invoice #]** from **[Vendor Name]** has been approved.\r\n>\r\n> | Field | Value |\r\n> |-------|-------|\r\n> | Approved by | [Approver name] or \"Auto-Approved (under $1,000)\" |\r\n> | Approval date | [Date/time] |\r\n> | Invoice total | [Amount] |\r\n> | PO number | [PO #] |\r\n> | Payment terms | [Terms] |\r\n> | Estimated payment date | [Calculated from approval date + terms] |\r\n>\r\n> **Notes from approver:** [If any, otherwise \"None\"]\r\n>\r\n> [Link to invoice record in Otto]\r\n\r\n**Vendor notification (external):**\r\n\r\n> **Subject:** Payment Confirmation — Invoice [Invoice #]\r\n>\r\n> Dear [Vendor Contact],\r\n>\r\n> We have received and approved your invoice **[Invoice #]** dated **[Date]** for **[Amount]**.\r\n>\r\n> Payment will be processed per our agreed terms (**[Payment Terms]**) with an estimated payment date of **[Date]**.\r\n>\r\n> Reference: PO [PO #]\r\n>\r\n> If you have questions, please contact ap@contoso.com.\r\n>\r\n> Thank you for your business.\r\n>\r\n> Contoso Corporation — Accounts Payable\r\n\r\n## 4. Rejection Notification\r\n\r\nWhen an invoice is rejected:\r\n\r\n**Recipients:**\r\n- Accounts Payable team - email is abc@example.com\r\n- Original requestor / PO owner\r\n\r\n\r\n**Internal notification:**\r\n\r\n> **Subject:** ❌ Invoice Rejected — [Vendor Name] — [Invoice #]\r\n>\r\n> **Invoice [Invoice #]** from **[Vendor Name]** has been **rejected**.\r\n>\r\n> | Field | Value |\r\n> |-------|-------|\r\n> | Rejected by | [Approver name] |\r\n> | Rejection date | [Date/time] |\r\n> | Invoice total | [Amount] |\r\n> | Reason | [Approver's stated reason] |\r\n>\r\n> **Required action:** [Based on rejection reason — see below]\r\n>\r\n\r\n\r\n**Rejection reason → Required action mapping:**\r\n\r\n| Reason | Action | Who |\r\n|--------|--------|-----|\r\n| Incorrect amount | Contact vendor for corrected invoice | AP Team |\r\n| Duplicate invoice | No action — archive as duplicate | System |\r\n| No PO / PO not found | Create or associate PO, resubmit | Procurement |\r\n| Goods not received | Verify with warehouse, hold pending receipt | Receiving |\r\n| Unauthorized vendor | Initiate vendor onboarding if appropriate | Vendor Management |\r\n| Budget exceeded | Seek budget amendment or cancel order | Department Manager |\r\n| Other | Route to AP supervisor for manual triage | AP Supervisor |\r\n\r\n**Vendor notification (external):**\r\n\r\n> **Subject:** Invoice [Invoice #] — Action Required\r\n>\r\n> Dear [Vendor Contact],\r\n>\r\n> We were unable to process your invoice **[Invoice #]** dated **[Date]** for the following reason:\r\n>\r\n> **[Rejection reason — customer-appropriate version]**\r\n>\r\n> **To resolve this, please:** [Specific action — e.g., \"Submit a corrected invoice with the updated amount\" or \"Provide PO reference number\"]\r\n>\r\n> Please send the updated documentation to ap@contoso.com referencing invoice **[Invoice #]**.\r\n>\r\n> Contoso Corporation — Accounts Payable\r\n\r\n\r\n## 8. Notification Rules\r\n\r\n- **Never send PHI, PCI, or sensitive financial data in email subject lines.** Keep subjects to vendor name + invoice number only.\r\n- **All external (vendor) notifications must use approved templates.** Do not include internal flags, agent analysis, or confidence scores in vendor-facing communications.\r\n- **Respect business hours.** Non-critical notifications are queued and sent at 8:00 AM local time if triggered outside business hours (7 AM – 7 PM). Critical notifications send immediately.\r\n- **De-duplicate notifications.** If an invoice triggers multiple flags, consolidate into a single notification rather than sending one per flag.\r\n- **Include deep links.** Every notification must include a direct link to the invoice record in the Otto portal for one-click access.\r\n",
+        "headers": {
+          "Accept-Ranges": "bytes",
+          "Server": "Windows-Azure-Blob/1.0,Microsoft-HTTPAPI/2.0",
+          "Content-Length": "6031",
+          "Content-Type": "text/markdown"
+        }
+      }
+    },
+    "Create_Ticket": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": null
+      }
+    },
+    "Archive_document": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "containers": [
+            {
+              "name": "azure-webjobs-hosts",
+              "eTag": "\"0x8DA1E4C2E5C055F\"",
+              "lastModifiedTime": "04/14/2022 19:22:57 +00:00"
+            },
+            {
+              "name": "azure-webjobs-secrets",
+              "eTag": "\"0x8DA1E4C2B0BA4D6\"",
+              "lastModifiedTime": "04/14/2022 19:22:51 +00:00"
+            },
+            {
+              "name": "bootdiagnostics-divyabts-24f3eda9-8b59-4a04-ada5-97f449fc461d",
+              "eTag": "\"0x8D6572E09D09AF4\"",
+              "lastModifiedTime": "12/01/2018 01:40:56 +00:00"
+            },
+            {
+              "name": "demodocs",
+              "eTag": "\"0x8DCD1B9264FC494\"",
+              "lastModifiedTime": "09/10/2024 16:53:52 +00:00"
+            },
+            {
+              "name": "pdfblob",
+              "eTag": "\"0x8DDE5D18798DE88\"",
+              "lastModifiedTime": "08/28/2025 01:23:44 +00:00"
+            },
+            {
+              "name": "references",
+              "eTag": "\"0x8DE23305D959C9D\"",
+              "lastModifiedTime": "11/14/2025 03:46:16 +00:00"
+            }
+          ],
+          "pageMarker": ""
+        }
+      }
+    },
+    "Update_Ticket": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": null
+      }
+    }
+  },
+  "connections": {
+    "outlook_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/outlook"
+    },
+    "service-now_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/service-now"
+    },
+    "salesforce_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/salesforce"
+    },
+    "sql_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/sql"
+    },
+    "AzureBlob_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/AzureBlob"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    }
+  }
+}

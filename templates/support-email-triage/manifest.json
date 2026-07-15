@@ -1,0 +1,223 @@
+{
+  "kind": "OttoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "support-email-triage",
+    "name": "Support Email Triage with Teams Escalation and SharePoint Logging",
+    "description": "Monitors a support inbox and automatically escalates urgent emails to a Microsoft Teams channel. All incoming emails are logged to a SharePoint list for tracking.",
+    "category": "automation",
+    "tags": [
+      "email",
+      "support",
+      "teams",
+      "sharepoint"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "OnSupportEmail": {
+          "type": "ApiConnectionNotification",
+          "inputs": {
+            "fetch": {
+              "method": "get",
+              "pathTemplate": {
+                "template": "/v3/Mail/OnNewEmail"
+              },
+              "queries": {
+                "folderPath": "Inbox",
+                "importance": "Any",
+                "fetchOnlyWithAttachment": false,
+                "includeAttachments": false
+              }
+            },
+            "subscribe": {
+              "method": "post",
+              "pathTemplate": {
+                "template": "/GraphMailSubscriptionPoke/$subscriptions"
+              },
+              "body": {
+                "NotificationUrl": "${listCallbackUrl()}"
+              },
+              "queries": {
+                "folderPath": "Inbox",
+                "importance": "Any",
+                "fetchOnlyWithAttachment": false,
+                "includeAttachments": false
+              }
+            },
+            "host": {
+              "apiId": "/managedApis/office365",
+              "operationId": "OnNewEmailV3",
+              "connection": {
+                "referenceName": "office365_#workflowname#"
+              }
+            }
+          },
+          "metadata": {
+            "Inbox": "Support"
+          },
+          "splitOn": "${triggerBody()?.['value']}"
+        }
+      },
+      "actions": {
+        "IsUrgent": {
+          "type": "If",
+          "expression": "${contains(coalesce(triggerBody()?.['subject'], ''), 'URGENT')}",
+          "actions": {
+            "Notify_team": {
+              "type": "ApiConnection",
+              "inputs": {
+                "method": "post",
+                "host": {
+                  "apiId": "/managedApis/teams",
+                  "operationId": "PostMessageToConversation",
+                  "connection": {
+                    "referenceName": "teams_#workflowname#"
+                  }
+                },
+                "path": "/beta/teams/conversation/message/poster/${encodeURIComponent('Flow bot')}/location/${encodeURIComponent('Channel')}",
+                "body": {
+                  "recipient": {
+                    "groupId": "",
+                    "channelId": ""
+                  },
+                  "messageBody": "<p class=\"editor-paragraph\"><span style=\"color: rgb(165, 214, 255); white-space: pre-wrap;\">High priority ticket needs attention. Here are the details shared by the customer:</span></p><p class=\"editor-paragraph\">${triggerBody()['body']}</p>"
+                }
+              },
+              "metadata": {
+                "swaggerPathTemplate": "/{connectionId}/beta/teams/conversation/message/poster/{poster}/location/{location}"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "NonUrgentAck": {
+                "type": "Compose",
+                "inputs": {
+                  "status": "received-not-urgent",
+                  "subject": "${triggerBody()?.['subject']}",
+                  "sender": "${coalesce(triggerBody()?.['from'], triggerBody()?.['sender'], 'Unknown')}"
+                }
+              }
+            }
+          }
+        },
+        "Log_support_ticket": {
+          "type": "ApiConnection",
+          "inputs": {
+            "method": "post",
+            "host": {
+              "apiId": "/managedApis/sharepointonline",
+              "operationId": "PostItem",
+              "connection": {
+                "referenceName": "sharepointonline_#workflowname#"
+              }
+            },
+            "path": "/datasets//tables//items",
+            "body": {
+              "Title": "${triggerBody()['bodyPreview']}",
+              "Subject": "${triggerBody()['subject']}",
+              "Sender": "${triggerBody()['toRecipients']}",
+              "InternetMessageId": "${triggerBody()['id']}",
+              "ReceivedAt": "${triggerBody()['receivedDateTime']}",
+              "TriggerRunId": "1"
+            }
+          },
+          "runAfter": {
+            "IsUrgent": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/datasets/{dataset}/tables/{table}/items"
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    },
+    "kind": "Stateful"
+  },
+  "trigger": {
+    "name": "OnSupportEmail",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": {
+        "value": [
+          {
+            "from": "user@contoso.com",
+            "toRecipients": "support@contoso.com",
+            "ccRecipients": "",
+            "bccRecipients": "",
+            "replyTo": "user@contoso.com",
+            "subject": "URGENT support request",
+            "body": "Please help with order issue",
+            "importance": "high",
+            "bodyPreview": "Please help with order issue",
+            "hasAttachments": false,
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "receivedDateTime": "2026-06-15T21:43:00Z"
+          }
+        ]
+      }
+    }
+  },
+  "mocks": {
+    "Notify_team": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "201",
+        "body": {
+          "id": "1781559824182",
+          "messageLink": "https://teams.microsoft.com/l/message/19:example@thread.skype/1781559824182",
+          "conversationId": "19:example@thread.skype"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    "NonUrgentAck": {
+      "runForReal": true
+    },
+    "Log_support_ticket": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "201",
+        "body": {
+          "ItemInternalId": "11",
+          "ID": 11,
+          "Title": "URGENT 10",
+          "Subject": "URGENT 10",
+          "Sender": "user@contoso.com",
+          "ReceivedAt": "2026-06-15",
+          "TriggerRunId": "1",
+          "Modified": "2026-06-15T21:43:54Z",
+          "Created": "2026-06-15T21:43:54Z"
+        },
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        }
+      }
+    }
+  },
+  "connections": {
+    "office365_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    },
+    "teams_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/teams"
+    },
+    "sharepointonline_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/sharepointonline"
+    }
+  }
+}
