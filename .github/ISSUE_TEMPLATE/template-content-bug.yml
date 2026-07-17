@@ -1,0 +1,107 @@
+name: "Template content bug"
+description: >-
+  A specific template in the gallery is broken: apply-time validation
+  errors, wrong placeholder/sample values, broken actions, incorrect
+  mock/test data, or misleading metadata.
+title: "[Template bug] <template-id>: <one-line summary>"
+labels: ["template-content"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when the problem **follows the template** — switching to a
+        different template makes it go away. If the problem reproduces with *any*
+        template (or with no template at all), it is a product issue, not a
+        template-content issue: route it through the internal Project Auto
+        support/escalation path instead of this repository.
+
+        > ⚠️ **This is a public repository.** Do **not** attach HAR files,
+        > browser console logs, subscription ids, tenant ids, access tokens, or
+        > any customer-identifiable data. Keep that evidence in the internal
+        > escalation and reference its ticket/case id below.
+  - type: input
+    id: template-id
+    attributes:
+      label: Template id
+      description: The template's folder id (visible in the gallery apply URL as `?applyTemplate=<id>`, and as the folder name under `templates/` in this repo).
+      placeholder: e.g. approval-request-teams
+    validations:
+      required: true
+  - type: input
+    id: template-name
+    attributes:
+      label: Template display name
+      placeholder: As shown on the gallery card
+    validations:
+      required: false
+  - type: dropdown
+    id: problem-kind
+    attributes:
+      label: What kind of problem is it?
+      options:
+        - Apply fails with validation errors ("Template apply failed")
+        - Wrong or missing placeholder/sample values (URLs, ids left as samples)
+        - Workflow definition is broken (actions missing, mis-wired, wrong types)
+        - Mock / test data is wrong (bad outputs, unmockable action mocked, status not Succeeded/Failed)
+        - Connection references are wrong (missing `_#workflowname#` placeholder, wrong connector)
+        - Misleading metadata (name, description, category, tags)
+        - Template missing from or stale in the gallery
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment / region
+      placeholder: e.g. canary / BrazilUS
+    validations:
+      required: true
+  - type: input
+    id: timestamp
+    attributes:
+      label: When was it observed? (UTC)
+      placeholder: e.g. 2026-07-17 09:30 UTC
+    validations:
+      required: true
+  - type: textarea
+    id: error-text
+    attributes:
+      label: Exact error text
+      description: Paste the toast/banner/validation text verbatim (redact anything customer-specific). Screenshots of the error are welcome if they contain no customer data.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro steps
+      placeholder: |
+        1. Open the template gallery in <environment>
+        2. Apply template <id> to a new workflow
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual
+      placeholder: What should the template have produced, and what did it produce instead?
+    validations:
+      required: true
+  - type: input
+    id: internal-ref
+    attributes:
+      label: Internal case / escalation reference
+      description: Ticket or case id where the full evidence package (HAR, console logs, customer identifiers) lives. Do not attach that evidence here.
+      placeholder: e.g. ICM 123456789 / support case id
+    validations:
+      required: false
+  - type: checkboxes
+    id: triage
+    attributes:
+      label: Triage already done
+      options:
+        - label: Confirmed the problem does NOT reproduce with a different template (i.e. it follows this template)
+          required: true
+        - label: Followed the Templates & Test Data TSG and ruled out customer-input fixes
+          required: false
