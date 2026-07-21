@@ -1,5 +1,5 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-execute-query-sql",
@@ -13,7 +13,10 @@
       "tool"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/sql"
+    ]
   },
   "workflow": {
     "definition": {

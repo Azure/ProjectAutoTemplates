@@ -1,5 +1,5 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-send-email-outlook",
@@ -13,7 +13,10 @@
       "notifications"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/office365"
+    ]
   },
   "workflow": {
     "definition": {
@@ -92,8 +95,8 @@
       "queries": {},
       "body": {
         "email_to": "user@example.com",
-        "email_subject": "Test Email from Otto",
-        "email_body": "This is a test email sent via the Otto workflow."
+        "email_subject": "Test Email from Auto",
+        "email_body": "This is a test email sent via the Auto workflow."
       }
     }
   },
@@ -104,8 +107,8 @@
         "statusCode": "200",
         "body": {
           "To": "user@example.com",
-          "Subject": "Test Email from Otto",
-          "Body": "This is a test email sent via the Otto workflow.",
+          "Subject": "Test Email from Auto",
+          "Body": "This is a test email sent via the Auto workflow.",
           "Importance": "Normal"
         }
       }

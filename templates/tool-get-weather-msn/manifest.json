@@ -1,5 +1,5 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-get-weather-msn",
@@ -12,7 +12,10 @@
       "monitoring"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/msnweather"
+    ]
   },
   "workflow": {
     "definition": {

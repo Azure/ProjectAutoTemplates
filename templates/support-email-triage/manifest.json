@@ -1,5 +1,5 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "support-email-triage",
@@ -13,7 +13,12 @@
       "sharepoint"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/office365",
+      "/managedApis/teams",
+      "/managedApis/sharepointonline"
+    ]
   },
   "workflow": {
     "definition": {

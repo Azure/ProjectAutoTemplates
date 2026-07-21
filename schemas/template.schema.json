@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
-  "title": "OttoTemplate",
-  "description": "Canonical manifest.json file format for Project Otto templates — a self-contained bundle that includes a workflow definition, mock data, trigger sample data, and connections in a single file. This schema covers the template envelope only; the embedded workflow.definition payload is governed by the official Azure Logic Apps workflow definition schema declared in workflow.definition.$schema. This file is the cross-repo source of truth: this repo validates against it in CI, and the portal repo consumes the same file. Validation-only semantics: consumers are responsible for applying defaults.",
+  "title": "AutoTemplate",
+  "description": "Canonical manifest.json file format for Project Auto templates — a self-contained bundle that includes a workflow definition, mock data, trigger sample data, and connections in a single file. This schema covers the template envelope only; the embedded workflow.definition payload is governed by the official Azure Logic Apps workflow definition schema declared in workflow.definition.$schema. This file is the cross-repo source of truth: this repo validates against it in CI, and the portal repo consumes the same file. Validation-only semantics: consumers are responsible for applying defaults.",
   "type": "object",
   "required": ["kind", "apiVersion", "metadata", "workflow", "trigger"],
   "properties": {
     "$schema": { "type": "string" },
-    "kind": { "const": "OttoTemplate" },
+    "kind": { "const": "AutoTemplate" },
     "apiVersion": { "const": "v1" },
     "metadata": { "$ref": "#/$defs/templateMetadata" },
     "workflow": { "$ref": "#/$defs/workflow" },
@@ -35,7 +35,7 @@
   "$defs": {
     "templateMetadata": {
       "type": "object",
-      "required": ["id", "name", "description", "category", "author", "source"],
+      "required": ["id", "name", "description", "category", "author", "source", "featuredConnectors"],
       "properties": {
         "id": {
           "description": "Stable, URL-safe identifier (e.g. \"tool-call-uri-http\").",
@@ -63,6 +63,12 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "default": []
+        },
+        "featuredConnectors": {
+          "description": "Connector ids surfaced on the template card, e.g. \"/managedApis/sql\" or \"connectionProviders/request\".",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
         },
         "author": {
           "description": "Author or organisation.",

@@ -1,5 +1,5 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-expense-report",
@@ -15,7 +15,12 @@
       "agent"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/formrecognizer",
+      "/managedApis/office365",
+      "connectionProviders/agent"
+    ]
   },
   "workflow": {
     "definition": {

@@ -12,7 +12,7 @@ templates gallery.
 ```
 templates/
   manifest.json                # JSON array of template folder ids — the publish allow-list
-  <template-id>/manifest.json  # full template document (kind: OttoTemplate, apiVersion: v1)
+  <template-id>/manifest.json  # full template document (kind: AutoTemplate, apiVersion: v1)
 schemas/                       # JSON Schema (source of truth) used by CI validation
 validate_templates.ts          # validation entry point (run by CI on every PR)
 ```
@@ -26,10 +26,11 @@ listed there fails validation and is not published.
 Every template `manifest.json` must satisfy the JSON Schema in
 [`schemas/template.schema.json`](schemas/template.schema.json):
 
-- `kind: "OttoTemplate"` and `apiVersion: "v1"`
+- `kind: "AutoTemplate"` and `apiVersion: "v1"`
 - `metadata` — `id` (must match the folder name), `name`, `description`, `category`
   (array of category strings), `tags`, `author` (must be `"Microsoft"`),
-  `source` (must be `"builtin"`)
+  `source` (must be `"builtin"`), `featuredConnectors` (array of connector ids
+  surfaced on the template card, e.g. `"/managedApis/sql"`)
 - `workflow` — the workflow to import. Its `definition` must declare the official
   Azure Logic Apps schema in `$schema`
   (`https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#`),
