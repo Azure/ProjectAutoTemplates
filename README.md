@@ -62,7 +62,7 @@ pnpm run test
 
 [`schemas/template.schema.json`](schemas/template.schema.json) is a standard
 [JSON Schema (draft 2020-12)](https://json-schema.org/) and is the **source of truth** for
-the template *envelope* format (metadata, trigger sample, mocks, notes, connections).
+the template *envelope* format (metadata, trigger sample, mocks, connections).
 The embedded `workflow.definition` payload is intentionally out of scope: its authority is
 the official Azure Logic Apps workflow definition schema pinned in
 `workflow.definition.$schema`. (That official 2016-06-01 schema predates Logic Apps
