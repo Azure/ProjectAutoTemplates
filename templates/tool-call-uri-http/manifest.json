@@ -1,18 +1,22 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-call-uri-http",
     "name": "HTTP Endpoint Caller",
     "description": "Accepts an HTTP request containing a URI and optional body, calls the target endpoint using a configurable HTTP method, and returns the response. Useful as an AI-agent tool for making outbound HTTP calls.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "http",
       "api",
       "patterns"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request",
+      "connectionProviders/Http"
+    ]
   },
   "workflow": {
     "definition": {
@@ -59,8 +63,7 @@
         }
       },
       "outputs": {}
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_a_HTTP_request_is_received",

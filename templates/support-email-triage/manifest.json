@@ -1,11 +1,11 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "support-email-triage",
     "name": "Support Email Triage with Teams Escalation and SharePoint Logging",
     "description": "Monitors a support inbox and automatically escalates urgent emails to a Microsoft Teams channel. All incoming emails are logged to a SharePoint list for tracking.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "email",
       "support",
@@ -13,7 +13,12 @@
       "sharepoint"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/office365",
+      "/managedApis/teams",
+      "/managedApis/sharepointonline"
+    ]
   },
   "workflow": {
     "definition": {
@@ -138,8 +143,7 @@
         }
       },
       "contentVersion": "1.0.0.0"
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "OnSupportEmail",

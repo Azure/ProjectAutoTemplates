@@ -1,5 +1,5 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-expense-report",
@@ -15,7 +15,12 @@
       "agent"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/formrecognizer",
+      "/managedApis/office365",
+      "connectionProviders/agent"
+    ]
   },
   "workflow": {
     "definition": {
@@ -145,8 +150,7 @@
         }
       },
       "contentVersion": "1.0.0.0"
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_an_HTTP_request_is_received",
@@ -833,20 +837,6 @@
           "Accept-Ranges": "bytes",
           "Server": "Windows-Azure-Blob/1.0,Microsoft-HTTPAPI/2.0"
         }
-      }
-    }
-  },
-  "notes": {
-    "1308d3c1-b8f6-4914-a036-2a29f32b706c": {
-      "content": "The sample expense report in this workflow is a snippet from the report available at Logic Apps GitHub repo here - https://github.com/Azure/logicapps/blob/master/templates-artifacts/Automation_Expense_Report_Simple.xlsx\n\n\nSample files can come from a REST endpoint like in this template, or via storage, sharepoint or any other source",
-      "color": "#FFFBCC",
-      "metadata": {
-        "position": {
-          "x": 144,
-          "y": -167
-        },
-        "width": 513,
-        "height": 154
       }
     }
   },

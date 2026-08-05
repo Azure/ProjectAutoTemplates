@@ -1,11 +1,11 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "order-validation",
     "name": "HTTP-Triggered Order Approval Workflow",
     "description": "Automatically approves or rejects incoming orders based on region and amount. Orders from the US exceeding $100 are approved; all others are rejected with a reason. Triggered via HTTP POST.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "http",
       "validation",
@@ -13,7 +13,10 @@
       "condition"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request"
+    ]
   },
   "workflow": {
     "definition": {
@@ -138,8 +141,7 @@
         }
       },
       "contentVersion": "1.0.0.0"
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_a_HTTP_request_is_received",

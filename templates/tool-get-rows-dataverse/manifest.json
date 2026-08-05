@@ -1,17 +1,20 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-get-rows-dataverse",
     "name": "Get Rows from Dataverse Table",
     "description": "Gets rows from a Microsoft Dataverse table. Triggered by an HTTP request, retrieves rows from the specified Dataverse table, and returns the response to the caller.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "dataverse",
       "data"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/commondataservice"
+    ]
   },
   "workflow": {
     "definition": {
@@ -63,8 +66,7 @@
         }
       },
       "outputs": {}
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_a_HTTP_request_is_received",

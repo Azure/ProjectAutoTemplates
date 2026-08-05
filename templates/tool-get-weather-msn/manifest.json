@@ -1,18 +1,21 @@
 {
-  "kind": "OttoTemplate",
+  "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
     "id": "tool-get-weather-msn",
     "name": "Get Weather via MSN Weather",
     "description": "Retrieves the weather forecast for today using the MSN Weather API. Designed to be triggered by an HTTP request and to provide weather information for a given location.",
-    "category": "automation",
+    "category": ["automation"],
     "tags": [
       "weather",
       "msn",
       "monitoring"
     ],
     "author": "Microsoft",
-    "source": "builtin"
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/msnweather"
+    ]
   },
   "workflow": {
     "definition": {
@@ -72,8 +75,7 @@
         }
       },
       "outputs": {}
-    },
-    "kind": "Stateful"
+    }
   },
   "trigger": {
     "name": "When_a_HTTP_request_is_received",

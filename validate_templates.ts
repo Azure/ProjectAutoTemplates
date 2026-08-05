@@ -7,8 +7,13 @@
  *      id has a matching folder (case-sensitive) containing manifest.json.
  *   2. Every folder under templates/ is listed in the index, and contains
  *      only expected files (manifest.json, plus optional card images).
- *   3. Each manifest.json is < 1 MB, parses, and passes the Template Zod schema
- *      (schemas/template.ts — a manual copy of the portal's canonical schema).
+ *   3. Each manifest.json is < 1 MB, parses, and passes the template envelope
+ *      JSON Schema (schemas/template.schema.json — the language-neutral source
+ *      of truth shared with the portal repo). The embedded workflow.definition
+ *      is governed by the official Azure Logic Apps schema pinned in its
+ *      $schema field; the envelope only enforces that pin (the official
+ *      2016-06-01 schema predates Standard/agentic action types, so CI does
+ *      not validate against it).
  *   4. metadata.id matches its folder name; ids are unique.
  *   5. metadata.source is "builtin" and metadata.author is "Microsoft".
  *   6. No credential-bearing values (headers, SAS/query secrets, bearer
@@ -20,9 +25,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { validateTemplate, type Template } from './schemas/template';
+import Ajv2020 from 'ajv/dist/2020';
+import type { ErrorObject } from 'ajv';
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
+const SCHEMA_PATH = path.join(__dirname, 'schemas', 'template.schema.json');
 const MAX_TEMPLATE_BYTES = 1024 * 1024; // 1 MB
 const REQUIRED_SOURCE = 'builtin';
 const REQUIRED_AUTHOR = 'Microsoft';
@@ -111,6 +118,48 @@ function findStructuralSecrets(value: unknown, docPath: string[] = []): string[]
   }
 
   return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Schema validation — compiled from the shared JSON Schema. The schema is
+// validation-only: it accepts both authoring forms of metadata.category and
+// does not apply defaults or transforms (consumers normalize in code).
+// ---------------------------------------------------------------------------
+
+/** The fields this script reads after schema validation has passed. */
+interface Template {
+  metadata: { id: string; author: string; source: string };
+  workflow: unknown;
+  connections?: Record<string, unknown>;
+}
+
+const ajv = new Ajv2020({ allErrors: true, allowUnionTypes: true });
+const validateTemplateSchema = ajv.compile(
+  JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8')),
+);
+
+/**
+ * Flatten Ajv errors into readable "path: message" strings. Branch-selector
+ * errors ("must match a schema in anyOf") are dropped — the per-branch errors
+ * they summarize are already included — and duplicates collapsed.
+ */
+function formatSchemaErrors(errors: ErrorObject[] | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const err of errors ?? []) {
+    if (err.keyword === 'anyOf') continue;
+    const docPath = err.instancePath
+      .split('/')
+      .slice(1)
+      .map((seg) => seg.replace(/~1/g, '/').replace(/~0/g, '~'))
+      .join('.');
+    const message = `${docPath ? `${docPath}: ` : ''}${err.message ?? 'is invalid'}`;
+    if (!seen.has(message)) {
+      seen.add(message);
+      out.push(message);
+    }
+  }
+  return out.length > 0 ? out : ['does not match the template schema'];
 }
 
 // ---------------------------------------------------------------------------
@@ -210,14 +259,13 @@ for (const id of index) {
     continue;
   }
 
-  const result = validateTemplate(parsed);
-  if (!result.success) {
-    for (const issue of result.errors) {
+  if (!validateTemplateSchema(parsed)) {
+    for (const issue of formatSchemaErrors(validateTemplateSchema.errors)) {
       fail(`${label}: schema — ${issue}`);
     }
     continue;
   }
-  const template: Template = result.data;
+  const template = parsed as unknown as Template;
 
   if (template.metadata.id !== id) {
     fail(`${label}: metadata.id is "${template.metadata.id}" but must match the folder name "${id}"`);
@@ -243,7 +291,7 @@ for (const id of index) {
   // enforces the _#workflowname# suffix on keys; also require the definition
   // to actually reference each declared connection.
   const definitionText = JSON.stringify(template.workflow);
-  for (const connectionName of Object.keys(template.connections)) {
+  for (const connectionName of Object.keys(template.connections ?? {})) {
     if (!definitionText.includes(`"${connectionName}"`)) {
       fail(`${label}: connections declares "${connectionName}" but the workflow definition never references it`);
     }
