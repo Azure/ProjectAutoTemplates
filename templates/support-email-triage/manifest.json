@@ -4,7 +4,7 @@
   "metadata": {
     "id": "support-email-triage",
     "name": "Support Email Triage with Teams Escalation and SharePoint Logging",
-    "description": "Monitors a support inbox and automatically escalates urgent emails to a Microsoft Teams channel. All incoming emails are logged to a SharePoint list for tracking.",
+    "description": "Fetches a support email and automatically escalates urgent messages to a Microsoft Teams channel. All incoming emails are logged to a SharePoint list for tracking.",
     "category": ["automation"],
     "tags": [
       "email",
@@ -24,54 +24,41 @@
     "definition": {
       "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
       "triggers": {
-        "OnSupportEmail": {
-          "type": "ApiConnectionNotification",
+        "Run_triage_for_an_email": {
+          "type": "Request",
+          "kind": "Http",
           "inputs": {
-            "fetch": {
-              "method": "get",
-              "pathTemplate": {
-                "template": "/v3/Mail/OnNewEmail"
-              },
-              "queries": {
-                "folderPath": "Inbox",
-                "importance": "Any",
-                "fetchOnlyWithAttachment": false,
-                "includeAttachments": false
-              }
-            },
-            "subscribe": {
-              "method": "post",
-              "pathTemplate": {
-                "template": "/GraphMailSubscriptionPoke/$subscriptions"
-              },
-              "body": {
-                "NotificationUrl": "${listCallbackUrl()}"
-              },
-              "queries": {
-                "folderPath": "Inbox",
-                "importance": "Any",
-                "fetchOnlyWithAttachment": false,
-                "includeAttachments": false
-              }
-            },
-            "host": {
-              "apiId": "/managedApis/office365",
-              "operationId": "OnNewEmailV3",
-              "connection": {
-                "referenceName": "office365_#workflowname#"
+            "schema": {
+              "type": "object",
+              "properties": {
+                "messageId": { "type": "string" }
               }
             }
-          },
-          "metadata": {
-            "Inbox": "Support"
-          },
-          "splitOn": "${triggerBody()?.['value']}"
+          }
         }
       },
       "actions": {
+        "Get_email": {
+          "type": "ApiConnection",
+          "inputs": {
+            "method": "get",
+            "host": {
+              "apiId": "/managedApis/office365",
+              "operationId": "GetEmailV2",
+              "connection": {
+                "referenceName": "office365_#workflowname#"
+              }
+            },
+            "path": "/v2/Mail/${encodeURIComponent(triggerBody()?.['messageId'])}"
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/v2/Mail/{messageId}"
+          },
+          "runAfter": {}
+        },
         "IsUrgent": {
           "type": "If",
-          "expression": "${contains(coalesce(triggerBody()?.['subject'], ''), 'URGENT')}",
+          "expression": "${contains(coalesce(body('Get_email')?.['subject'], ''), 'URGENT')}",
           "actions": {
             "Notify_team": {
               "type": "ApiConnection",
@@ -90,7 +77,7 @@
                     "groupId": "",
                     "channelId": ""
                   },
-                  "messageBody": "<p class=\"editor-paragraph\"><span style=\"color: rgb(165, 214, 255); white-space: pre-wrap;\">High priority ticket needs attention. Here are the details shared by the customer:</span></p><p class=\"editor-paragraph\">${triggerBody()['body']}</p>"
+                  "messageBody": "<p class=\"editor-paragraph\"><span style=\"color: rgb(165, 214, 255); white-space: pre-wrap;\">High priority ticket needs attention. Here are the details shared by the customer:</span></p><p class=\"editor-paragraph\">${body('Get_email')?.['body']}</p>"
                 }
               },
               "metadata": {
@@ -104,11 +91,16 @@
                 "type": "Compose",
                 "inputs": {
                   "status": "received-not-urgent",
-                  "subject": "${triggerBody()?.['subject']}",
-                  "sender": "${coalesce(triggerBody()?.['from'], triggerBody()?.['sender'], 'Unknown')}"
+                  "subject": "${body('Get_email')?.['subject']}",
+                  "sender": "${coalesce(body('Get_email')?.['from'], body('Get_email')?.['sender'], 'Unknown')}"
                 }
               }
             }
+          },
+          "runAfter": {
+            "Get_email": [
+              "Succeeded"
+            ]
           }
         },
         "Log_support_ticket": {
@@ -124,11 +116,11 @@
             },
             "path": "/datasets//tables//items",
             "body": {
-              "Title": "${triggerBody()['bodyPreview']}",
-              "Subject": "${triggerBody()['subject']}",
-              "Sender": "${triggerBody()['toRecipients']}",
-              "InternetMessageId": "${triggerBody()['id']}",
-              "ReceivedAt": "${triggerBody()['receivedDateTime']}",
+              "Title": "${body('Get_email')?.['bodyPreview']}",
+              "Subject": "${body('Get_email')?.['subject']}",
+              "Sender": "${body('Get_email')?.['toRecipients']}",
+              "InternetMessageId": "${body('Get_email')?.['id']}",
+              "ReceivedAt": "${body('Get_email')?.['receivedDateTime']}",
               "TriggerRunId": "1"
             }
           },
@@ -146,32 +138,39 @@
     }
   },
   "trigger": {
-    "name": "OnSupportEmail",
+    "name": "Run_triage_for_an_email",
     "outputs": {
       "method": "POST",
-      "headers": {},
+      "headers": {
+        "Content-Type": "application/json"
+      },
       "queries": {},
       "body": {
-        "value": [
-          {
-            "from": "user@contoso.com",
-            "toRecipients": "support@contoso.com",
-            "ccRecipients": "",
-            "bccRecipients": "",
-            "replyTo": "user@contoso.com",
-            "subject": "URGENT support request",
-            "body": "Please help with order issue",
-            "importance": "high",
-            "bodyPreview": "Please help with order issue",
-            "hasAttachments": false,
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-            "receivedDateTime": "2026-06-15T21:43:00Z"
-          }
-        ]
+        "messageId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
       }
     }
   },
   "mocks": {
+    "Get_email": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "from": "user@contoso.com",
+          "toRecipients": "support@contoso.com",
+          "subject": "URGENT support request",
+          "body": "Please help with order issue",
+          "bodyPreview": "Please help with order issue",
+          "importance": "high",
+          "hasAttachments": false,
+          "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "receivedDateTime": "2026-06-15T21:43:00Z"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
     "Notify_team": {
       "status": "Succeeded",
       "outputs": {
