@@ -50,10 +50,10 @@ for (const category of categories) {
   });
 }
 
-test('accepts multiple purpose-based categories', () => {
+test('accepts up to three purpose-based categories', () => {
   assert.equal(
     validateTemplateSchema(
-      withCategory(['ai', 'finance', 'document-processing', 'summarization']),
+      withCategory(['ai', 'finance', 'document-processing']),
     ),
     true,
   );
@@ -74,6 +74,7 @@ const invalidCategories: Array<[string, unknown]> = [
   ['null category', null],
   ['non-string id', [1]],
   ['duplicate ids', ['ai', 'ai']],
+  ['more than three ids', ['ai', 'finance', 'document-processing', 'summarization']],
   ['other before a named category', ['other', 'api']],
   ['other after a named category', ['api', 'other']],
 ];

@@ -44,8 +44,9 @@ Every template `manifest.json` must satisfy the JSON Schema in
 ## Template categories
 
 `metadata.category` uses the lowercase ids below, enforced by the shared schema.
-Choose a small set of categories based on the description and the actual workflow,
-including agent instructions and nested tools. Categories can describe both the
+Choose no more than three categories based on the description and the actual
+workflow, including agent instructions and nested tools. Prefer two categories
+when they adequately describe the template. Categories can describe both the
 business purpose and the capabilities that are central to the workflow.
 
 | Label | Id | Use for |
@@ -66,14 +67,15 @@ business purpose and the capabilities that are central to the workflow.
 | Data | `data` | Structured-data retrieval, queries, synchronization, transformation, and analytics. |
 | Other | `other` | A fallback only when none of the named categories fits. Must be used alone. |
 
-Category ids must be unique within a template. Unknown ids, display labels in place
-of ids, and the retired `automation` category are rejected. `ai` is an ordinary
-category, not a default or a fallback; no category is assigned automatically.
-General discovery terms and connector names can remain in `metadata.tags`.
+Category ids must be unique within a template, with a maximum of three. Unknown
+ids, display labels in place of ids, and the retired `automation` category are
+rejected. `ai` is an ordinary category, not a default or a fallback; no category
+is assigned automatically. General discovery terms and connector names can
+remain in `metadata.tags`.
 
 For example, an expense-report agent belongs in
-`["ai", "finance", "document-processing", "summarization"]`, not Sales. A rule-based
-support-email triage workflow belongs in
+`["ai", "finance", "document-processing"]`, not Sales. A rule-based support-email
+triage workflow belongs in
 `["support", "communication", "categorization"]`, not AI. Do not infer Sales from
 a Salesforce connector, IT Ops from a ServiceNow connector, or API from an HTTP
 trigger when those are incidental to the workflow's purpose.

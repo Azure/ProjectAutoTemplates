@@ -50,7 +50,7 @@
           "minLength": 1
         },
         "category": {
-          "description": "One or more unique, supported category ids describing the workflow's purpose. AI is not a default. Use other only when no named category fits, and never alongside another category.",
+          "description": "One to three unique, supported category ids describing the workflow's purpose. Prefer two categories when they adequately describe the template. AI is not a default. Use other only when no named category fits, and never alongside another category.",
           "type": "array",
           "items": {
             "type": "string",
@@ -73,6 +73,7 @@
             ]
           },
           "minItems": 1,
+          "maxItems": 3,
           "uniqueItems": true,
           "if": { "contains": { "const": "other" } },
           "then": { "maxItems": 1 }
