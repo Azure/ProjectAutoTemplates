@@ -50,10 +50,32 @@
           "minLength": 1
         },
         "category": {
-          "description": "One or more free-form category strings.",
+          "description": "One or more unique, supported category ids describing the workflow's purpose. AI is not a default. Use other only when no named category fits, and never alongside another category.",
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "minItems": 1
+          "items": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "sales",
+              "it-ops",
+              "marketing",
+              "engineering",
+              "support",
+              "operations",
+              "communication",
+              "api",
+              "summarization",
+              "categorization",
+              "finance",
+              "document-processing",
+              "data",
+              "other"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "if": { "contains": { "const": "other" } },
+          "then": { "maxItems": 1 }
         },
         "tags": {
           "description": "Search / filter tags.",

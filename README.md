@@ -28,7 +28,7 @@ Every template `manifest.json` must satisfy the JSON Schema in
 
 - `kind: "AutoTemplate"` and `apiVersion: "v1"`
 - `metadata` — `id` (must match the folder name), `name`, `description`, `category`
-  (array of category strings), `tags`, `author` (must be `"Microsoft"`),
+  (non-empty array of supported category ids), `tags`, `author` (must be `"Microsoft"`),
   `source` (must be `"builtin"`), `featuredConnectors` (array of connector ids
   surfaced on the template card, e.g. `"/managedApis/sql"`)
 - `workflow` — the workflow to import. Its `definition` must declare the official
@@ -40,6 +40,48 @@ Every template `manifest.json` must satisfy the JSON Schema in
   (or `{ "runForReal": true }` opt-outs)
 - `connections` — connection references; names must end with the `_#workflowname#`
   placeholder so they can be rewritten at import time
+
+## Template categories
+
+`metadata.category` uses the lowercase ids below, enforced by the shared schema.
+Choose a small set of categories based on the description and the actual workflow,
+including agent instructions and nested tools. Categories can describe both the
+business purpose and the capabilities that are central to the workflow.
+
+| Label | Id | Use for |
+| --- | --- | --- |
+| AI | `ai` | Workflows that execute an AI model, agent, or AI-powered document analysis. Being callable by an agent alone is not enough. |
+| Sales | `sales` | Sales processes, leads, customers, and sales-order handling. |
+| IT Ops | `it-ops` | Infrastructure monitoring, provisioning, service incidents, and IT administration. |
+| Marketing | `marketing` | Campaigns, audience engagement, and marketing content. |
+| Engineering | `engineering` | Software-development workflows and reusable technical building blocks. |
+| Support | `support` | Customer issues, feedback handling, ticket triage, and escalation. |
+| Operations | `operations` | Internal business processes, approval rules, and order operations. |
+| Communication | `communication` | Email, messaging, and collaboration as a core purpose, not just an incidental notification. |
+| API | `api` | Reusable request-response endpoints, HTTP/webhook integration patterns, and callable service wrappers. An HTTP trigger or connector callback alone does not qualify. |
+| Summarization | `summarization` | Generating condensed summaries or reports from source content. |
+| Categorization | `categorization` | Assigning labels, sentiment, ratings, or routing groups using AI or explicit rules. Does not imply AI. |
+| Finance | `finance` | Expense review, invoicing, accounting, and financial validation. |
+| Document Processing | `document-processing` | Extracting, structuring, or validating content from documents and reports. |
+| Data | `data` | Structured-data retrieval, queries, synchronization, transformation, and analytics. |
+| Other | `other` | A fallback only when none of the named categories fits. Must be used alone. |
+
+Category ids must be unique within a template. Unknown ids, display labels in place
+of ids, and the retired `automation` category are rejected. `ai` is an ordinary
+category, not a default or a fallback; no category is assigned automatically.
+General discovery terms and connector names can remain in `metadata.tags`.
+
+For example, an expense-report agent belongs in
+`["ai", "finance", "document-processing", "summarization"]`, not Sales. A rule-based
+support-email triage workflow belongs in
+`["support", "communication", "categorization"]`, not AI. Do not infer Sales from
+a Salesforce connector, IT Ops from a ServiceNow connector, or API from an HTTP
+trigger when those are incidental to the workflow's purpose.
+
+Consumers must support these ids and their display labels when adopting this
+schema. Older copies of templates using `automation` must be reclassified by
+purpose rather than renamed to `ai`. This repository does not configure portal
+category controls or default gallery filters.
 
 ## Contributing a template
 

@@ -122,8 +122,8 @@ function findStructuralSecrets(value: unknown, docPath: string[] = []): string[]
 
 // ---------------------------------------------------------------------------
 // Schema validation — compiled from the shared JSON Schema. The schema is
-// validation-only: it accepts both authoring forms of metadata.category and
-// does not apply defaults or transforms (consumers normalize in code).
+// validation-only: it requires supported category ids in metadata.category
+// and does not apply defaults or transforms.
 // ---------------------------------------------------------------------------
 
 /** The fields this script reads after schema validation has passed. */
