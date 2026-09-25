@@ -9,5 +9,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["validate_templates.ts"]
+  "include": ["validate_templates.ts", "template_categories.test.ts"]
 }

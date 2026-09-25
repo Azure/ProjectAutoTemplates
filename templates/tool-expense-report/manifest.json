@@ -7,7 +7,8 @@
     "description": "An agentic workflow that retrieves an Excel expense report, converts it to structured text using Azure AI Document Intelligence, and analyzes it with an AI agent. The agent tallies all line items, flags expenses that exceed a configurable threshold for manager approval, and sends a formatted HTML summary via email.",
     "category": [
       "ai",
-      "automation"
+      "finance",
+      "document-processing"
     ],
     "tags": [
       "tool",

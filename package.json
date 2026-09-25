@@ -4,7 +4,7 @@
   "private": true,
   "description": "Validation tooling for Project Auto templates",
   "scripts": {
-    "test": "tsx validate_templates.ts",
+    "test": "tsx validate_templates.ts && tsx --test template_categories.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
