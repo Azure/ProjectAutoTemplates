@@ -1,0 +1,177 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "office365-email-attachments-onedrive",
+    "name": "Save Office 365 email attachments to OneDrive for Business",
+    "description": "When an Office 365 Outlook email with attachments arrives, saves every attachment sequentially to a selected OneDrive for Business folder while preserving each file name and content.",
+    "category": [
+      "communication",
+      "document-processing"
+    ],
+    "tags": [
+      "email",
+      "attachments",
+      "office365",
+      "outlook",
+      "onedrive"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/office365",
+      "/managedApis/onedriveforbusiness"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_new_email_arrives_V3": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/office365",
+              "operationId": "OnNewEmailV3",
+              "connection": {
+                "referenceName": "office365_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/v3/Mail/OnNewEmail",
+            "queries": {
+              "folderPath": "Inbox",
+              "fetchOnlyWithAttachment": true,
+              "includeAttachments": true
+            }
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/v3/Mail/OnNewEmail"
+          },
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 3
+          },
+          "splitOn": "${triggerBody()?.value}"
+        }
+      },
+      "actions": {
+        "For_each_attachment": {
+          "type": "Foreach",
+          "foreach": "${triggerBody()?.attachments}",
+          "actions": {
+            "Create_file": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/managedApis/onedriveforbusiness",
+                  "operationId": "CreateFile",
+                  "connection": {
+                    "referenceName": "onedriveforbusiness_#workflowname#"
+                  }
+                },
+                "method": "post",
+                "path": "/datasets/default/files",
+                "queries": {
+                  "folderPath": "/Email Attachments",
+                  "name": "${items('For_each_attachment')?.name}"
+                },
+                "body": "${base64ToBinary(items('For_each_attachment')?.contentBytes)}"
+              },
+              "metadata": {
+                "swaggerPathTemplate": "/{connectionId}/datasets/default/files"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {},
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_a_new_email_arrives_V3",
+    "outputs": {
+      "method": "GET",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "folderPath": "Inbox",
+        "fetchOnlyWithAttachment": true,
+        "includeAttachments": true
+      },
+      "body": {
+        "value": [
+          {
+            "from": "sender@example.com",
+            "toRecipients": "recipient@example.com",
+            "subject": "Files for processing",
+            "hasAttachments": true,
+            "id": "mock-message-001",
+            "attachments": [
+              {
+                "id": "mock-attachment-001",
+                "name": "quarterly-summary.txt",
+                "contentBytes": "UXVhcnRlcmx5IHN1bW1hcnk=",
+                "contentType": "text/plain",
+                "size": 17,
+                "isInline": false
+              },
+              {
+                "id": "mock-attachment-002",
+                "name": "project-notes.txt",
+                "contentBytes": "UHJvamVjdCBub3Rlcw==",
+                "contentType": "text/plain",
+                "size": 13,
+                "isInline": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "mocks": {
+    "Create_file": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "Id": "mock-onedrive-file-id",
+          "Name": "mock-created-file.txt",
+          "DisplayName": "mock-created-file.txt",
+          "Path": "/Email Attachments/mock-created-file.txt",
+          "LastModified": "2026-09-23T19:00:00Z",
+          "Size": 17,
+          "MediaType": "text/plain",
+          "IsFolder": false,
+          "ETag": "mock-etag",
+          "FileLocator": "mock-file-locator",
+          "LastModifiedBy": "Otto validation"
+        }
+      }
+    }
+  },
+  "connections": {
+    "office365_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    },
+    "onedriveforbusiness_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/onedriveforbusiness"
+    }
+  }
+}

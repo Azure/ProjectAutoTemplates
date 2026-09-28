@@ -1,0 +1,233 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "excel-feedback-ai-teams-email",
+    "name": "Summarize Excel Feedback with AI",
+    "description": "Lists feedback rows from Excel, asks AI for a concise sentiment report and improvement suggestions, then shares the same report in Microsoft Teams and Office 365 Outlook.",
+    "category": [
+      "ai",
+      "support",
+      "summarization"
+    ],
+    "tags": [
+      "feedback",
+      "excel",
+      "ai",
+      "teams",
+      "email",
+      "sentiment"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/excelonlinebusiness",
+      "/managedApis/teams",
+      "/managedApis/office365",
+      "connectionProviders/agent"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Day"
+          }
+        }
+      },
+      "actions": {
+        "List_feedback_rows": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "excelonlinebusiness_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/drives/OneDrive/files/%2FFeedback.xlsx/tables/Feedback/items",
+            "queries": {
+              "source": "me"
+            }
+          },
+          "runAfter": {}
+        },
+        "Summarize_feedback": {
+          "type": "Agent",
+          "limit": {
+            "count": 3,
+            "timeout": "PT5M"
+          },
+          "inputs": {
+            "parameters": {
+              "agentModelType": "AzureOpenAI",
+              "deploymentId": "gpt-5.2",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You summarize collected feedback. Produce only a short, readable report with: an Overall sentiment line; one concise sentiment line for each question; and a few constructive suggestions for improvement. Base every conclusion only on the supplied feedback rows."
+                },
+                {
+                  "role": "user",
+                  "content": "Summarize these Excel feedback rows directly: ${body('List_feedback_rows')?.value}"
+                }
+              ],
+              "agentModelSettings": {
+                "deploymentModelProperties": {
+                  "name": "gpt-5.2"
+                },
+                "agentMaxIterations": 3
+              }
+            },
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            }
+          },
+          "runAfter": {
+            "List_feedback_rows": [
+              "SUCCEEDED"
+            ]
+          }
+        },
+        "Post_summary_to_Teams": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "teams_#workflowname#"
+              }
+            },
+            "method": "post",
+            "path": "/beta/teams/conversation/message/poster/Flow%20bot/location/Channel",
+            "body": {
+              "recipient": {
+                "groupId": "00000000-0000-0000-0000-000000000000",
+                "channelId": "19:feedback-summary@thread.tacv2"
+              },
+              "messageBody": "${outputs('Summarize_feedback')?.lastAssistantMessage}"
+            }
+          },
+          "runAfter": {
+            "Summarize_feedback": [
+              "SUCCEEDED"
+            ]
+          }
+        },
+        "Email_summary": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "office365_#workflowname#"
+              }
+            },
+            "method": "post",
+            "path": "/v2/Mail",
+            "body": {
+              "To": "feedback-owner@example.com",
+              "Subject": "Feedback summary report",
+              "Body": "${outputs('Summarize_feedback')?.lastAssistantMessage}"
+            }
+          },
+          "runAfter": {
+            "Post_summary_to_Teams": [
+              "SUCCEEDED"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "Recurrence",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "List_feedback_rows": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "value": [
+            {
+              "Respondent": "A",
+              "How satisfied are you with the service?": "Very satisfied - quick and friendly support.",
+              "How useful was the documentation?": "Useful and easy to follow."
+            },
+            {
+              "Respondent": "B",
+              "How satisfied are you with the service?": "Neutral - it solved the issue but took a while.",
+              "How useful was the documentation?": "Neutral - adequate, but search could be better."
+            },
+            {
+              "Respondent": "C",
+              "How satisfied are you with the service?": "Dissatisfied - response times were too slow.",
+              "How useful was the documentation?": "Not useful - setup steps were missing."
+            },
+            {
+              "Respondent": "D",
+              "How satisfied are you with the service?": "Satisfied overall.",
+              "How useful was the documentation?": "Helpful examples, but troubleshooting needs improvement."
+            }
+          ]
+        }
+      }
+    },
+    "Post_summary_to_Teams": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "201",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "mock-teams-message-1",
+          "messageLink": "https://teams.example.invalid/mock-teams-message-1",
+          "conversationId": "mock-feedback-channel"
+        }
+      }
+    },
+    "Email_summary": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {},
+        "body": {}
+      }
+    }
+  },
+  "connections": {
+    "excelonlinebusiness_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/excelonlinebusiness"
+    },
+    "teams_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/teams"
+    },
+    "office365_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    }
+  }
+}

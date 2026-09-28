@@ -1,0 +1,163 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "office365-email-attachments-sharepoint",
+    "name": "Save Office 365 email attachments to SharePoint",
+    "description": "When an email with attachments arrives in a selected Office 365 Outlook folder, save every attachment sequentially to a selected SharePoint document-library folder.",
+    "category": [
+      "communication",
+      "document-processing"
+    ],
+    "tags": [
+      "Office 365 Outlook",
+      "SharePoint",
+      "Email attachments"
+    ],
+    "featuredConnectors": [
+      "/managedApis/office365",
+      "/managedApis/sharepointonline"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_new_email_arrives": {
+          "type": "ApiConnection",
+          "splitOn": "${triggerBody()?.value}",
+          "recurrence": {
+            "interval": 3,
+            "frequency": "Minute"
+          },
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "office-365-outlook_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/v3/Mail/OnNewEmail",
+            "queries": {
+              "folderPath": "Inbox",
+              "fetchOnlyWithAttachment": true,
+              "includeAttachments": true
+            }
+          }
+        }
+      },
+      "actions": {
+        "For_each_attachment": {
+          "type": "Foreach",
+          "foreach": "${triggerBody()?.attachments}",
+          "actions": {
+            "Create_file": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "sharepoint_#workflowname#"
+                  }
+                },
+                "method": "post",
+                "path": "/datasets/https%253A%252F%252Fcontoso.sharepoint.com%252Fsites%252FTeamSite/files",
+                "queries": {
+                  "folderPath": "Shared Documents/Email Attachments",
+                  "name": "${item()?.name}",
+                  "queryParametersSingleEncoded": true
+                },
+                "body": "${base64ToBinary(item()?.contentBytes)}"
+              }
+            }
+          },
+          "runAfter": {},
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_a_new_email_arrives",
+    "outputs": {
+      "method": "GET",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "folderPath": "Inbox",
+        "fetchOnlyWithAttachment": true,
+        "includeAttachments": true
+      },
+      "body": {
+        "value": [
+          {
+            "from": "sender@example.com",
+            "toRecipients": "recipient@example.com",
+            "subject": "Attached documents",
+            "hasAttachments": true,
+            "id": "sample-message-id",
+            "attachments": [
+              {
+                "id": "sample-attachment-1",
+                "name": "first-document.txt",
+                "contentBytes": "Rmlyc3Qgc2FtcGxlIGF0dGFjaG1lbnQu",
+                "contentType": "text/plain",
+                "size": 24,
+                "isInline": false
+              },
+              {
+                "id": "sample-attachment-2",
+                "name": "second-document.txt",
+                "contentBytes": "U2Vjb25kIHNhbXBsZSBhdHRhY2htZW50Lg==",
+                "contentType": "text/plain",
+                "size": 25,
+                "isInline": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "mocks": {
+    "Create_file": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "ItemId": 101,
+          "Id": "%252fShared%2bDocuments%252fEmail%2bAttachments%252fsample-document.txt",
+          "Name": "sample-document.txt",
+          "DisplayName": "sample-document.txt",
+          "Path": "/Shared Documents/Email Attachments/sample-document.txt",
+          "Size": 24,
+          "MediaType": "text/plain",
+          "IsFolder": false,
+          "ETag": "\"{00000000-0000-0000-0000-000000000000},1\""
+        }
+      }
+    }
+  },
+  "connections": {
+    "office-365-outlook_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    },
+    "sharepoint_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/sharepointonline"
+    }
+  }
+}

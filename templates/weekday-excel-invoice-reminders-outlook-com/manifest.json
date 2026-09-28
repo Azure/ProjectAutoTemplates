@@ -1,0 +1,248 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "weekday-excel-invoice-reminders-outlook-com",
+    "name": "Weekday Excel invoice reminders with Outlook.com",
+    "description": "Each weekday morning, find unpaid Excel invoices that are overdue or due within three calendar days and send each customer one polite Outlook.com reminder.",
+    "category": [
+      "finance",
+      "communication"
+    ],
+    "tags": [
+      "invoices",
+      "reminders",
+      "excel",
+      "outlook"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/excelonlinebusiness",
+      "/managedApis/outlook"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "schedule": {
+              "hours": [
+                8
+              ],
+              "minutes": [
+                0
+              ],
+              "weekDays": [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday"
+              ]
+            },
+            "timeZone": "Pacific Standard Time"
+          }
+        }
+      },
+      "actions": {
+        "Settings": {
+          "type": "Compose",
+          "inputs": {
+            "workbook": {
+              "location": "me",
+              "drive": "OneDrive",
+              "file": "/Invoices/Invoices.xlsx",
+              "table": "InvoicesTable"
+            },
+            "columns": {
+              "invoiceNumber": "Invoice Number",
+              "customerName": "Customer Name",
+              "customerEmail": "Customer Email",
+              "dueDate": "Due Date",
+              "amount": "Amount",
+              "paymentStatus": "Payment Status"
+            },
+            "paidStatus": "Paid",
+            "timeZone": "Pacific Standard Time"
+          },
+          "runAfter": {}
+        },
+        "Date_window": {
+          "type": "Compose",
+          "inputs": {
+            "today": "${formatDateTime(convertTimeZone(utcNow(), 'UTC', outputs('Settings').timeZone), 'yyyy-MM-dd')}",
+            "through": "${formatDateTime(addDays(convertTimeZone(utcNow(), 'UTC', outputs('Settings').timeZone), 3), 'yyyy-MM-dd')}"
+          },
+          "runAfter": {
+            "Settings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_invoice_rows": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "excel-online-business_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/drives/${encodeURIComponent(outputs('Settings').workbook.drive)}/files/${encodeURIComponent(encodeURIComponent(outputs('Settings').workbook.file))}/tables/${encodeURIComponent(outputs('Settings').workbook.table)}/items",
+            "queries": {
+              "source": "${outputs('Settings').workbook.location}",
+              "dateTimeFormat": "ISO 8601"
+            }
+          },
+          "runAfter": {
+            "Date_window": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_eligible_invoices": {
+          "type": "Query",
+          "inputs": {
+            "from": "${body('Get_invoice_rows')?.value}",
+            "where": "${String(item()[outputs('Settings').columns.customerEmail] ?? '').trim() !== '' && String(item()[outputs('Settings').columns.paymentStatus] ?? '').trim().toLowerCase() !== String(outputs('Settings').paidStatus).trim().toLowerCase() && String(item()[outputs('Settings').columns.dueDate] ?? '').length >= 10 && String(item()[outputs('Settings').columns.dueDate] ?? '').substring(0, 10) <= outputs('Date_window').through}"
+          },
+          "runAfter": {
+            "Get_invoice_rows": [
+              "Succeeded"
+            ]
+          }
+        },
+        "For_each_eligible_invoice": {
+          "type": "Foreach",
+          "foreach": "${body('Filter_eligible_invoices')}",
+          "operationOptions": "Sequential",
+          "actions": {
+            "Send_invoice_reminder": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "outlook-com_#workflowname#"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "${String(item()[outputs('Settings').columns.customerEmail] ?? '').trim()}",
+                  "Subject": "${String(item()[outputs('Settings').columns.dueDate] ?? '').substring(0, 10) < outputs('Date_window').today ? 'Overdue invoice ' + String(item()[outputs('Settings').columns.invoiceNumber] ?? '') + ' - friendly reminder' : 'Invoice ' + String(item()[outputs('Settings').columns.invoiceNumber] ?? '') + ' is due soon'}",
+                  "Body": "${String(item()[outputs('Settings').columns.dueDate] ?? '').substring(0, 10) < outputs('Date_window').today ? '<p>Hello ' + String(item()[outputs('Settings').columns.customerName] ?? '') + ',</p><p>This is a friendly reminder that invoice <strong>' + String(item()[outputs('Settings').columns.invoiceNumber] ?? '') + '</strong> for <strong>' + String(item()[outputs('Settings').columns.amount] ?? '') + '</strong> was due on ' + String(item()[outputs('Settings').columns.dueDate] ?? '').substring(0, 10) + ' and appears to remain unpaid. Please arrange payment at your earliest convenience, or let us know if you have already paid.</p><p>Thank you.</p>' : '<p>Hello ' + String(item()[outputs('Settings').columns.customerName] ?? '') + ',</p><p>This is a friendly reminder that invoice <strong>' + String(item()[outputs('Settings').columns.invoiceNumber] ?? '') + '</strong> for <strong>' + String(item()[outputs('Settings').columns.amount] ?? '') + '</strong> is due on ' + String(item()[outputs('Settings').columns.dueDate] ?? '').substring(0, 10) + '. Please arrange payment by the due date, or let us know if you have already paid.</p><p>Thank you.</p>'}",
+                  "Importance": "Normal"
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_eligible_invoices": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "Recurrence",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "Get_invoice_rows": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "value": [
+            {
+              "Invoice Number": "INV-1001",
+              "Customer Name": "Avery Stone",
+              "Customer Email": "avery@example.com",
+              "Due Date": "2026-09-22T14:30:00Z",
+              "Amount": "$1,250.00",
+              "Payment Status": "Unpaid"
+            },
+            {
+              "Invoice Number": "INV-1002",
+              "Customer Name": "Blair Chen",
+              "Customer Email": "blair@example.com",
+              "Due Date": "2026-09-23",
+              "Amount": "$480.00",
+              "Payment Status": "Pending"
+            },
+            {
+              "Invoice Number": "INV-1003",
+              "Customer Name": "Casey Morgan",
+              "Customer Email": "casey@example.com",
+              "Due Date": "2026-09-26T09:00:00-07:00",
+              "Amount": "$725.00",
+              "Payment Status": "Open"
+            },
+            {
+              "Invoice Number": "INV-1004",
+              "Customer Name": "Devon Reed",
+              "Customer Email": "devon@example.com",
+              "Due Date": "2026-09-23",
+              "Amount": "$315.00",
+              "Payment Status": "  pAiD  "
+            },
+            {
+              "Invoice Number": "INV-1005",
+              "Customer Name": "Emery Patel",
+              "Customer Email": "   ",
+              "Due Date": "2026-09-23",
+              "Amount": "$940.00",
+              "Payment Status": "Unpaid"
+            },
+            {
+              "Invoice Number": "INV-1006",
+              "Customer Name": "Finley Ross",
+              "Customer Email": "finley@example.com",
+              "Due Date": "2026-09-27",
+              "Amount": "$1,100.00",
+              "Payment Status": "Unpaid"
+            }
+          ]
+        }
+      }
+    },
+    "Send_invoice_reminder": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {},
+        "body": {}
+      }
+    }
+  },
+  "connections": {
+    "excel-online-business_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/excelonlinebusiness"
+    },
+    "outlook-com_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/outlook"
+    }
+  }
+}

@@ -1,0 +1,274 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "automate-azure-key-vault-secret-rotation",
+    "name": "Automate Azure Key vault Secret Rotation",
+    "description": "This template creates workflow with a REST endpoint that lists the secrets in Azure Key vault. An AI Agent parses the list, and based on renewal policies comes up with new dates, goes through human approval and then updates secrets",
+    "category": [
+      "ai",
+      "it-ops"
+    ],
+    "tags": [],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/keyVault",
+      "/managedApis/teams",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http"
+        }
+      },
+      "actions": {
+        "List_secrets": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/keyVault",
+              "operationId": "listSecretMetadata",
+              "connectionName": "keyVault_#workflowname#"
+            },
+            "parameters": {
+              "parameters": ""
+            }
+          }
+        },
+        "Workflow_Agent": {
+          "type": "Agent",
+          "inputs": {
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            },
+            "parameters": {
+              "agentModelSettings": {
+                "agentHistoryReductionSettings": {
+                  "agentHistoryReductionType": "maximumTokenCountReduction",
+                  "maximumTokenCount": 128000
+                },
+                "deploymentModelProperties": {
+                  "name": "gpt-5.4",
+                  "format": "OpenAI",
+                  "version": "2026-03-05"
+                }
+              },
+              "messages": [
+                {
+                  "role": "System",
+                  "content": "# OBJECTIVE\nYour are an Agent that helps with Keyvault Secret rotation before they expire. Monitor Azure Key Vault secret metadata, identify enabled secrets approaching expiration, prepare a rotation plan, obtain explicit human approval, and update only the approved secrets. You will get a list, but go through all the steps below, one secret at a time - human approval can happen in parallel though. This workflow is an automated workflow, so do not ask for permission to go through all secrets.\n\nTone: Professional and efficient.\n\n# DEFINITIONS\n- Expiration threshold: The configured number of days before expiration when a secret becomes eligible for rotation. Use 15 days unless the user or policy supplies another value.\n- Expired: The expiration time has passed.\n- Expiring soon: The secret expires within the expiration threshold.\n- Rotation: Update the secret with the new expiration date. Use 90 days unless user or policy supplies a different value. \n- Approval: An explicit confirmation from an authorized human that identifies the exact proposed operations. Silence, an ambiguous response, or approval of an earlier plan is not approval.\n\n\n# INPUT VALIDATION\n1. Confirm each item contains enough metadata to identify the secret and its validity date\n2. Validate expiration timestamps and interpret them as UTC.\n3. Exclude disabled secrets from automatic rotation and report them separately.\n\n# WORKFLOW  (Complete this workflow and all steps one at a time for each secret that needs to be updated. Don't ask for permission to process each secret)\n## Step 1: Analyze the secret inventory\n1. Calculate the number of calendar days until expiration.\n2. Classify it as:\n   - Expired\n   - Expiring soon\n   - Healthy\n   - No expiration configured\n   - Disabled\n   - Invalid metadata\n3. Select only enabled secrets classified as Expired or Expiring soon as rotation candidates.\n4. Do not perform any write operation during analysis.\nIf no secrets require action, provide the inventory summary and end the workflow.\n\n\n## Step 2: Get Human Approval for each secret individually. Present this information to help human with approval. Show an Approve or Reject button for each secret. You can get the approval for each secret in parallel as they are not dependent on each other.\n\nSecret Name  \nStatus  \nCurrent expiry \nDays remaining  \nProposed action  \nProposed expiry \n\n\n## Step 3: Execute approved operations\nUpdate the secret expiration if its approved.\n\nNote - The expire date has to be in certain formart for Keyvault. It must be Unix epoch seconds — a plain integer, not a string,\nnot milliseconds, not an ISO date. Example: 1791590400 is\n2026-10-10T00:00:00Z. Must be in the future.\n\n## Step 4 : Explain in the output your decisions and actions"
+                },
+                {
+                  "role": "User",
+                  "content": "Here are the secrets ${body('List_secrets')}"
+                }
+              ],
+              "agentModelType": "AzureOpenAI",
+              "deploymentId": "gpt-5.4"
+            }
+          },
+          "runAfter": {
+            "List_secrets": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "count": 60,
+            "timeout": "PT1H"
+          },
+          "tools": {
+            "Update_Secret": {
+              "actions": {
+                "Update_Secret": {
+                  "type": "Http",
+                  "inputs": {
+                    "uri": "https://REPLACE_WITH_KEY_VAULT_NAME.vault.azure.net/secrets/${agentParameters('secretName')}?api-version=7.4",
+                    "method": "PUT",
+                    "body": {
+                      "value": "@{substring(guid(),0,5)}-@{rand(100000,9999999)}",
+                      "attributes": {
+                        "enabled": true,
+                        "exp": "${agentParameters('expiryDate')}"
+                      }
+                    },
+                    "authentication": {
+                      "type": "managedServiceIdentity",
+                      "audience": "https://vault.azure.net",
+                      "identity": ""
+                    }
+                  }
+                }
+              },
+              "description": "Update KeyVault Secret Expiry",
+              "agentParameterSchema": {
+                "type": "object",
+                "properties": {
+                  "secretName": {
+                    "type": "string",
+                    "description": "Name of the secret"
+                  },
+                  "expiryDate": {
+                    "type": "string",
+                    "description": "Expiry Date of the secret"
+                  }
+                },
+                "required": []
+              }
+            },
+            "Get_Human_Review": {
+              "actions": {
+                "Get_Human_Review": {
+                  "type": "ApiConnectionWebhook",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/managedApis/teams",
+                      "operationId": "PostCardAndWaitForResponse",
+                      "connection": {
+                        "referenceName": "teams_#workflowname#"
+                      }
+                    },
+                    "path": "/v1.0/teams/conversation/gatherinput/poster/${encodeURIComponent('Flow bot')}/location/${encodeURIComponent('Channel')}/$subscriptions",
+                    "body": {
+                      "notificationUrl": "${listCallbackUrl()}",
+                      "body": {
+                        "messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.4\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"@{agentParameters('secretUpdateContext')}\",\n      \"wrap\": true,\n      \"weight\": \"Bolder\",\n      \"size\": \"Medium\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"Approve\",\n       \"style\": \"positive\",\n      \"data\": {\n        \"action\": \"approve\"\n      }\n    },\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"Reject\",\n       \"style\": \"destructive\",\n      \"data\": {\n        \"action\": \"reject\"\n      }\n    }\n  ]\n}",
+                        "updateMessage": "Thanks for your response!",
+                        "recipient": {
+                          "groupId": "00000000-0000-0000-0000-000000000000",
+                          "channelId": "19:REPLACE_WITH_TEAMS_CHANNEL_ID@thread.tacv2"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Post adaptive card and wait for a response tool",
+              "agentParameterSchema": {
+                "type": "object",
+                "properties": {
+                  "secretUpdateContext": {
+                    "type": "string",
+                    "description": "Provide all the details about the secret, expiry and new dates so that human approver can review and make decision. Provide this information in a well formatted and human readable way"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "*/*",
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": null
+    }
+  },
+  "mocks": {
+    "List_secrets": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": [
+          {
+            "name": "ContosoITWebAPI",
+            "isEnabled": true,
+            "createdTime": "2026-09-18T19:47:09Z",
+            "lastUpdatedTime": "2026-09-18T20:00:31Z",
+            "validityEndTime": "2026-09-23T23:00:00Z"
+          },
+          {
+            "name": "ZavaRetailAPI",
+            "isEnabled": true,
+            "createdTime": "2026-08-31T20:54:07Z",
+            "lastUpdatedTime": "2026-08-31T20:54:07Z"
+          },
+          {
+            "name": "FourthCoffeeWebAPI",
+            "isEnabled": true,
+            "createdTime": "2026-09-18T19:56:56Z",
+            "lastUpdatedTime": "2026-09-18T19:56:56Z",
+            "validityEndTime": "2026-12-18T01:40:00Z"
+          },
+          {
+            "name": "WebAPIKey",
+            "isEnabled": true,
+            "createdTime": "2026-09-18T19:57:16Z",
+            "lastUpdatedTime": "2026-09-18T20:01:09Z",
+            "validityEndTime": "2026-09-23T02:00:00Z"
+          }
+        ]
+      }
+    },
+    "Update_Secret": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "value": "***",
+          "id": "https://example.vault.azure.net/secrets/ExampleSecret/00000000000000000000000000000000",
+          "attributes": {
+            "enabled": true,
+            "exp": 1797548400,
+            "created": 1789761729,
+            "updated": 1789761729,
+            "recoveryLevel": "Recoverable+Purgeable",
+            "recoverableDays": 90
+          }
+        }
+      }
+    },
+    "Get_Human_Review": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "responseTime": "2026-09-18T20:02:03.1189846Z",
+          "responder": {
+            "objectId": "00000000-0000-0000-0000-000000000000",
+            "tenantId": "00000000-0000-0000-0000-000000000000",
+            "email": "approver@example.com",
+            "userPrincipalName": "approver@example.com",
+            "displayName": "Example Approver"
+          },
+          "submitActionId": "Approve",
+          "messageId": "mock-approval-message",
+          "messageLink": "https://teams.example.invalid/mock-approval-message",
+          "data": {
+            "action": "approve"
+          }
+        }
+      }
+    }
+  },
+  "connections": {
+    "teams_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/teams"
+    },
+    "keyVault_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/keyVault"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    }
+  }
+}

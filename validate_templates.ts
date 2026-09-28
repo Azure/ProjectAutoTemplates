@@ -56,6 +56,14 @@ const SENSITIVE_QUERY_PARAMS = new Set(['code', 'sig', 'sp', 'sv', 'se', 'sr']);
 
 const REDACTED = '***';
 
+const AUTHENTICATION_TYPES = new Set([
+  'basic',
+  'clientcertificate',
+  'activedirectoryoauth',
+  'raw',
+  'managedserviceidentity',
+]);
+
 /** Text-level patterns that indicate an unscrubbed secret anywhere in the file. */
 const SECRET_TEXT_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: 'bearer token', pattern: /Bearer\s+[A-Za-z0-9._~+/-]{16,}=*/ },
@@ -100,6 +108,14 @@ function findStructuralSecrets(value: unknown, docPath: string[] = []): string[]
 
     if (lowerKey === 'authentication' && child && typeof child === 'object') {
       for (const [authKey, authValue] of Object.entries(child as Record<string, unknown>)) {
+        // Known authentication type labels are not credential values.
+        if (
+          authKey.toLowerCase() === 'type' &&
+          typeof authValue === 'string' &&
+          AUTHENTICATION_TYPES.has(authValue.toLowerCase())
+        ) {
+          continue;
+        }
         if (
           typeof authValue === 'string' &&
           authValue !== REDACTED &&

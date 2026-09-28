@@ -9,5 +9,15 @@
   "tool-get-weather-msn",
   "tool-invoice-flow",
   "tool-send-email-outlook",
-  "tool-sentiment-analysis"
+  "tool-sentiment-analysis",
+  "automate-azure-key-vault-secret-rotation",
+  "excel-feedback-ai-teams-email",
+  "gmail-email-attachments-google-drive",
+  "google-sheets-gmail-invoice-reminders",
+  "invoice-docintel-ai-excel",
+  "office365-email-attachments-onedrive",
+  "office365-email-attachments-sharepoint",
+  "outlook-email-attachments-onedrive",
+  "sheets-feedback-ai-gmail",
+  "weekday-excel-invoice-reminders-outlook-com"
 ]

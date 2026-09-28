@@ -1,0 +1,253 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "google-sheets-gmail-invoice-reminders",
+    "name": "Google Sheets invoice payment reminders",
+    "description": "Every weekday morning, find unpaid Google Sheets invoices that are overdue or due within three calendar days and send polite Gmail reminders sequentially.",
+    "category": [
+      "finance",
+      "communication"
+    ],
+    "tags": [
+      "invoices",
+      "payment reminders",
+      "Google Sheets",
+      "Gmail",
+      "scheduled"
+    ],
+    "featuredConnectors": [
+      "/managedApis/googlesheet",
+      "/managedApis/gmail"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "Every_weekday_morning": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "schedule": {
+              "weekDays": [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday"
+              ],
+              "hours": [
+                8
+              ],
+              "minutes": [
+                0
+              ]
+            },
+            "timeZone": "Pacific Standard Time"
+          }
+        }
+      },
+      "actions": {
+        "Settings": {
+          "type": "Compose",
+          "inputs": {
+            "spreadsheet": "INVOICE_SPREADSHEET_ID",
+            "worksheet": "Invoices",
+            "columns": {
+              "invoiceNumber": "Invoice Number",
+              "customerName": "Customer Name",
+              "customerEmail": "Customer Email",
+              "dueDate": "Due Date",
+              "amount": "Amount",
+              "paymentStatus": "Payment Status"
+            },
+            "paidStatus": "Paid",
+            "timeZone": "Pacific Standard Time"
+          },
+          "runAfter": {}
+        },
+        "Date_window": {
+          "type": "Compose",
+          "inputs": {
+            "today": "${formatDateTime(convertTimeZone(utcNow(), 'UTC', outputs('Settings').timeZone), 'yyyy-MM-dd')}",
+            "windowEndDate": "${formatDateTime(addDays(convertTimeZone(utcNow(), 'UTC', outputs('Settings').timeZone), 3), 'yyyy-MM-dd')}"
+          },
+          "runAfter": {
+            "Settings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_invoice_rows": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "referenceName": "google-sheets_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/datasets/${encodeURIComponent(outputs('Settings').spreadsheet)}/tables/${encodeURIComponent(outputs('Settings').worksheet)}/items",
+            "queries": {
+              "$top": 1000
+            }
+          },
+          "runAfter": {
+            "Settings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_eligible_invoices": {
+          "type": "Query",
+          "inputs": {
+            "from": "${outputs('Get_invoice_rows')?.body?.value ?? []}",
+            "where": "${String(item()?.[outputs('Settings').columns.customerEmail] ?? '').trim() !== '' && String(item()?.[outputs('Settings').columns.paymentStatus] ?? '').trim().toLowerCase() !== String(outputs('Settings').paidStatus).trim().toLowerCase() && /^\\d{4}-\\d{2}-\\d{2}$/.test(String(item()?.[outputs('Settings').columns.dueDate] ?? '').slice(0, 10)) && String(item()[outputs('Settings').columns.dueDate]).slice(0, 10) <= outputs('Date_window').windowEndDate}"
+          },
+          "runAfter": {
+            "Get_invoice_rows": [
+              "Succeeded"
+            ],
+            "Date_window": [
+              "Succeeded"
+            ]
+          }
+        },
+        "For_each_eligible_invoice": {
+          "type": "Foreach",
+          "foreach": "${outputs('Filter_eligible_invoices').body}",
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "actions": {
+            "Send_payment_reminder": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "gmail_#workflowname#"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "${String(item()[outputs('Settings').columns.customerEmail]).trim()}",
+                  "Subject": "${String(item()[outputs('Settings').columns.dueDate]).slice(0, 10) < outputs('Date_window').today ? 'Payment reminder: invoice ' + String(item()[outputs('Settings').columns.invoiceNumber]) + ' is overdue' : 'Payment reminder: invoice ' + String(item()[outputs('Settings').columns.invoiceNumber]) + ' is due soon'}",
+                  "Body": "${String(item()[outputs('Settings').columns.dueDate]).slice(0, 10) < outputs('Date_window').today ? 'Dear ' + String(item()[outputs('Settings').columns.customerName] ?? 'Customer') + ',<br><br>This is a polite reminder that invoice ' + String(item()[outputs('Settings').columns.invoiceNumber]) + ' for ' + String(item()[outputs('Settings').columns.amount]) + ' was due on ' + String(item()[outputs('Settings').columns.dueDate]).slice(0, 10) + ' and is now overdue. Please arrange payment at your earliest convenience.<br><br>If payment has already been made, please disregard this message.<br><br>Thank you.' : 'Dear ' + String(item()[outputs('Settings').columns.customerName] ?? 'Customer') + ',<br><br>This is a polite reminder that invoice ' + String(item()[outputs('Settings').columns.invoiceNumber]) + ' for ' + String(item()[outputs('Settings').columns.amount]) + ' is due on ' + String(item()[outputs('Settings').columns.dueDate]).slice(0, 10) + '. Please arrange payment by the due date.<br><br>If payment has already been made, please disregard this message.<br><br>Thank you.'}",
+                  "Importance": "Normal"
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_eligible_invoices": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "Every_weekday_morning",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "Get_invoice_rows": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "value": [
+            {
+              "Invoice Number": "INV-1001",
+              "Customer Name": "Avery Stone",
+              "Customer Email": "avery@example.test",
+              "Due Date": "2026-09-20",
+              "Amount": "$125.00",
+              "Payment Status": "Unpaid"
+            },
+            {
+              "Invoice Number": "INV-1002",
+              "Customer Name": "Blake Chen",
+              "Customer Email": "blake@example.test",
+              "Due Date": "2026-09-23",
+              "Amount": "$250.00",
+              "Payment Status": "Paid"
+            },
+            {
+              "Invoice Number": "INV-1003",
+              "Customer Name": "Casey Morgan",
+              "Customer Email": "casey@example.test",
+              "Due Date": "2026-09-23",
+              "Amount": "$375.00",
+              "Payment Status": "Unpaid"
+            },
+            {
+              "Invoice Number": "INV-1006",
+              "Customer Name": "Finley Brooks",
+              "Customer Email": "finley@example.test",
+              "Due Date": "2026-09-26",
+              "Amount": "$450.00",
+              "Payment Status": "Unpaid"
+            },
+            {
+              "Invoice Number": "INV-1004",
+              "Customer Name": "Drew Patel",
+              "Customer Email": "drew@example.test",
+              "Due Date": "2026-09-27",
+              "Amount": "$500.00",
+              "Payment Status": "Unpaid"
+            },
+            {
+              "Invoice Number": "INV-1005",
+              "Customer Name": "Emerson Reyes",
+              "Customer Email": "",
+              "Due Date": "2026-09-22",
+              "Amount": "$625.00",
+              "Payment Status": "Unpaid"
+            }
+          ]
+        }
+      }
+    },
+    "Send_payment_reminder": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {},
+        "body": {}
+      }
+    }
+  },
+  "connections": {
+    "google-sheets_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/googlesheet"
+    },
+    "gmail_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/gmail"
+    }
+  }
+}

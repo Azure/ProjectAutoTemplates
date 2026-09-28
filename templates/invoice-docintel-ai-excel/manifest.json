@@ -1,0 +1,256 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "invoice-docintel-ai-excel",
+    "name": "Email Invoice Extraction to Excel",
+    "description": "Processes the first PDF attached to a new Outlook email with Document Intelligence, extracts key invoice fields with AI, and adds one row to a configured Excel table.",
+    "category": [
+      "ai",
+      "finance",
+      "document-processing"
+    ],
+    "tags": [
+      "invoice",
+      "outlook",
+      "document-intelligence",
+      "excel",
+      "ai"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/office365",
+      "/managedApis/formrecognizer",
+      "connectionProviders/agent",
+      "/managedApis/excelonlinebusiness"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_new_email_arrives_V3": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/office365",
+              "operationId": "OnNewEmailV3",
+              "connection": {
+                "referenceName": "office365_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/v3/Mail/OnNewEmail",
+            "queries": {
+              "folderPath": "Inbox",
+              "importance": "Any",
+              "fetchOnlyWithAttachment": true,
+              "includeAttachments": true
+            }
+          },
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 3
+          },
+          "splitOn": "${triggerOutputs()?.body?.value}"
+        }
+      },
+      "actions": {
+        "Analyze_Invoice": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/formrecognizer",
+              "operationId": "AnalyzeDocumentV40",
+              "connection": {
+                "referenceName": "formrecognizer_#workflowname#"
+              }
+            },
+            "method": "post",
+            "path": "/connectorinternaldocumentintelligence/documentModels/${encodeURIComponent('prebuilt-layout')}:analyze",
+            "queries": {
+              "api-version": "2024-11-30",
+              "outputContentFormat": "markdown"
+            },
+            "body": "${triggerBody()?.attachments?.[0]?.contentBytes}"
+          },
+          "runAfter": {}
+        },
+        "Extract_Invoice_Data": {
+          "type": "Agent",
+          "inputs": {
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            },
+            "parameters": {
+              "messages": [
+                {
+                  "role": "System",
+                  "content": "Extract invoice data from the supplied Markdown. Return only one valid JSON object with exactly these keys: vendor, invoiceNumber, invoiceDate, dueDate, totalAmount, currency, lineItemsSummary. Use strings for every value, including totalAmount. Use ISO 8601 YYYY-MM-DD dates when the source provides a date. Keep lineItemsSummary short. Use an empty string for a missing value. Do not include Markdown fences, commentary, or additional keys."
+                },
+                {
+                  "role": "User",
+                  "content": "${body('Analyze_Invoice')?.analyzeResult?.content}"
+                }
+              ],
+              "agentModelType": "AzureOpenAI",
+              "deploymentId": "gpt-5.2",
+              "agentModelSettings": {
+                "deploymentModelProperties": {
+                  "name": "gpt-5.2",
+                  "format": "OpenAI",
+                  "version": "2025-12-11"
+                },
+                "agentHistoryReductionSettings": {
+                  "agentHistoryReductionType": "maximumTokenCountReduction",
+                  "maximumTokenCount": 128000
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Analyze_Invoice": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "count": 2,
+            "timeout": "PT5M"
+          }
+        },
+        "Add_Invoice_Row": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/excelonlinebusiness",
+              "operationId": "AddRowV2",
+              "connection": {
+                "referenceName": "excelonlinebusiness_#workflowname#"
+              }
+            },
+            "method": "post",
+            "path": "/codeless/v1.2/drives/${encodeURIComponent('me')}/items/${encodeURIComponent(encodeURIComponent('/Invoices/InvoiceRegister.xlsx'))}/workbook/tables/${encodeURIComponent('InvoiceTable')}/rows",
+            "queries": {
+              "dateTimeFormat": "ISO 8601"
+            },
+            "body": {
+              "vendor": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.vendor}",
+              "invoiceNumber": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.invoiceNumber}",
+              "invoiceDate": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.invoiceDate}",
+              "dueDate": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.dueDate}",
+              "totalAmount": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.totalAmount}",
+              "currency": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.currency}",
+              "lineItemsSummary": "${JSON.parse(body('Extract_Invoice_Data')?.lastAssistantMessage)?.lineItemsSummary}"
+            }
+          },
+          "runAfter": {
+            "Extract_Invoice_Data": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "trigger": {
+    "name": "When_a_new_email_arrives_V3",
+    "outputs": {
+      "method": "GET",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "folderPath": "Inbox",
+        "importance": "Any",
+        "fetchOnlyWithAttachment": true,
+        "includeAttachments": true
+      },
+      "body": {
+        "value": [
+          {
+            "from": "billing@northwind.example",
+            "toRecipients": "accounts-payable@contoso.example",
+            "subject": "Invoice NW-2026-1042",
+            "body": "Please find the attached invoice.",
+            "hasAttachments": true,
+            "id": "representative-invoice-email",
+            "receivedDateTime": "2026-09-24T22:30:00Z",
+            "attachments": [
+              {
+                "id": "invoice-attachment-1",
+                "name": "NW-2026-1042.pdf",
+                "contentBytes": "JVBERi0xLjQKJSBSZXByZXNlbnRhdGl2ZSBpbnZvaWNlIFBERiBmb3IgaG9zdGVkIG1vY2sgdmFsaWRhdGlvbi4KJSVFT0YK",
+                "contentType": "application/pdf",
+                "size": 81,
+                "isInline": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "mocks": {
+    "Analyze_Invoice": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "status": "succeeded",
+          "createdDateTime": "2026-09-24T22:30:01Z",
+          "lastUpdatedDateTime": "2026-09-24T22:30:02Z",
+          "analyzeResult": {
+            "apiVersion": "2024-11-30",
+            "modelId": "prebuilt-layout",
+            "stringIndexType": "textElements",
+            "contentFormat": "markdown",
+            "content": "# INVOICE\n\n**Northwind Office Supplies**  \nInvoice Number: NW-2026-1042  \nInvoice Date: 2026-09-15  \nDue Date: 2026-10-15  \nCurrency: USD\n\n| Description | Quantity | Unit Price | Amount |\n|---|---:|---:|---:|\n| Ergonomic keyboard | 2 | 125.00 | 250.00 |\n| USB-C dock | 1 | 349.50 | 349.50 |\n\n**Total: USD 599.50**"
+          }
+        }
+      }
+    },
+    "Add_Invoice_Row": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "vendor": "Northwind Office Supplies",
+          "invoiceNumber": "NW-2026-1042",
+          "invoiceDate": "2026-09-15",
+          "dueDate": "2026-10-15",
+          "totalAmount": "599.50",
+          "currency": "USD",
+          "lineItemsSummary": "2 ergonomic keyboards and 1 USB-C dock"
+        }
+      }
+    }
+  },
+  "connections": {
+    "office365_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    },
+    "formrecognizer_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/formrecognizer"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    },
+    "excelonlinebusiness_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/excelonlinebusiness"
+    }
+  }
+}
