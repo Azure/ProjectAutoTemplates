@@ -102,26 +102,6 @@ pnpm install
 pnpm run test
 ```
 
-### Invoice example mock coverage
-
-`tool-invoice-flow` includes canned outputs for every external connector or HTTP
-action, including both condition branches and the agent's tools. The AI agent
-itself remains live and requires a configured model connection; the condition
-also executes normally. `template_invoice.test.ts` checks this example's mock
-coverage as part of `pnpm run test`.
-
-The supplemental `Notify`, `Update_CRM`, and `Close_Ticket` outputs are curated
-samples, not captured live-run results: a successful email acknowledgement and
-empty Salesforce and ServiceNow record lists. They match the existing operations,
-which are not necessarily the operations suggested by their action names.
-No email is sent or external record changed when these mocks are enabled.
-
-When curating a run-generated template, inspect unexecuted branches and optional
-agent tools: one completed run may not supply outputs for every action. Missing
-mock entries and explicit `runForReal` opt-outs still mean live execution in the
-general template format. This example's completeness test does not impose a new
-requirement on other templates.
-
 ## Schema sharing
 
 [`schemas/template.schema.json`](schemas/template.schema.json) is a standard
