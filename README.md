@@ -102,6 +102,24 @@ pnpm install
 pnpm run test
 ```
 
+## GitHub issue to Azure DevOps Boards setup
+
+The `github-new-issue-to-azure-devops-boards` template keeps source and destination
+resource fields empty so imports do not subscribe to the author's repository or
+write to the author's project. Configure the GitHub trigger's **Owner** and
+**Repository**, bind both connector connections, and choose the Boards action's
+**Project** before publishing. The default work item type is **Issue**; select
+a type supported by the destination project's process if it does not support
+Issue. The GitHub connection must be able to create and remove repository
+webhooks, and the Boards connection must be able to create the selected work item
+type.
+
+Only `opened` issue events create a work item. The description uses the incoming
+issue's `html_url`, so it follows the configured repository without editing an
+expression. The trigger payload and mocked Boards response are synthetic sample
+data. Keep the Boards action mock enabled for draft testing; disable it only
+when intentionally testing real writes to a configured project.
+
 ## Schema sharing
 
 [`schemas/template.schema.json`](schemas/template.schema.json) is a standard

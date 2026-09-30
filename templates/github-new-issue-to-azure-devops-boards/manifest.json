@@ -1,0 +1,130 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "github-new-issue-to-azure-devops-boards",
+    "name": "Create an Azure DevOps Boards issue from a new GitHub issue",
+    "description": "When a new issue is opened in the configured GitHub repository, create a matching Azure DevOps Boards Issue with its title, body, and source URL. Configure the repository, Azure DevOps project, and supported work item type before publishing.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "GitHub",
+      "Azure DevOps",
+      "Boards"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/github",
+      "/serviceProviders/ado-boards"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_an_issue_event_occurs": {
+          "type": "ServiceProviderWebhook",
+          "inputs": {
+            "parameters": {
+              "owner": "",
+              "repo": ""
+            },
+            "serviceProviderConfiguration": {
+              "connectionName": "github_#workflowname#",
+              "operationId": "on-new-issue",
+              "serviceProviderId": "/serviceProviders/github"
+            }
+          }
+        }
+      },
+      "actions": {
+        "If_issue_was_opened": {
+          "type": "If",
+          "expression": "@equals(triggerBody()?['action'], 'opened')",
+          "actions": {
+            "Create_Azure_DevOps_Boards_Issue": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "parameters": {
+                  "project": "",
+                  "type": "Issue",
+                  "body/fields": {
+                    "System.Title": "@triggerBody()?['issue']?['title']",
+                    "System.Description": "@concat('Source: ', triggerBody()?['issue']?['html_url'], decodeUriComponent('%0A'), coalesce(triggerBody()?['issue']?['body'], ''))"
+                  }
+                },
+                "serviceProviderConfiguration": {
+                  "connectionName": "ado-boards_#workflowname#",
+                  "operationId": "work-items-create",
+                  "serviceProviderId": "/serviceProviders/ado-boards"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {}
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_an_issue_event_occurs",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-GitHub-Event": "issues"
+      },
+      "queries": {},
+      "body": {
+        "action": "opened",
+        "issue": {
+          "number": 1,
+          "title": "Example issue",
+          "body": "Example issue body",
+          "html_url": "https://github.com/example-org/example-repo/issues/1"
+        },
+        "repository": {
+          "full_name": "example-org/example-repo"
+        }
+      }
+    }
+  },
+  "mocks": {
+    "Create_Azure_DevOps_Boards_Issue": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "rev": 1,
+          "fields": {
+            "System.Title": "Example issue",
+            "System.Description": "Source: https://github.com/example-org/example-repo/issues/1\nExample issue body"
+          }
+        }
+      }
+    }
+  },
+  "connections": {
+    "github_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/github"
+    },
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    }
+  }
+}
