@@ -9,5 +9,6 @@
   "tool-get-weather-msn",
   "tool-invoice-flow",
   "tool-send-email-outlook",
-  "tool-sentiment-analysis"
+  "tool-sentiment-analysis",
+  "github-new-issue-to-azure-devops-boards"
 ]
