@@ -529,6 +529,30 @@
         "body": null
       }
     },
+    "Notify": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "202"
+      }
+    },
+    "Update_CRM": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "value": []
+        }
+      }
+    },
+    "Close_Ticket": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "result": []
+        }
+      }
+    },
     "Archive_document": {
       "status": "Succeeded",
       "outputs": {
