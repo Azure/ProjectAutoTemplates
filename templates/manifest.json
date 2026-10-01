@@ -21,5 +21,6 @@
   "sheets-feedback-ai-gmail",
   "weekday-excel-invoice-reminders-outlook-com",
   "github-new-issue-to-azure-devops-boards",
-  "summarize-azure-devops-work-item-agent"
+  "summarize-azure-devops-work-item-agent",
+  "http-queue-ado-pipeline"
 ]

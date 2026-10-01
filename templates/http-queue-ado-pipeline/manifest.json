@@ -1,0 +1,154 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "http-queue-ado-pipeline",
+    "name": "Queue an Azure DevOps pipeline",
+    "description": "Queue an Azure DevOps pipeline from an HTTP request and return the queued run details.",
+    "category": [
+      "engineering",
+      "api"
+    ],
+    "tags": [
+      "HTTP",
+      "Azure DevOps",
+      "Pipelines"
+    ],
+    "featuredConnectors": [
+      "connectionProviders/request",
+      "/serviceProviders/ado-pipelines"
+    ],
+    "author": "Microsoft",
+    "source": "builtin"
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "Request": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "pipelineId": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Pipeline ID"
+                },
+                "templateParameters": {
+                  "type": "object",
+                  "description": "Pipeline template parameters"
+                }
+              },
+              "required": [
+                "pipelineId"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Queue_pipeline": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "parameters": {
+              "project": "",
+              "pipelineId": "@triggerBody()?['pipelineId']",
+              "body/templateParameters": "@coalesce(triggerBody()?['templateParameters'], json('{}'))"
+            },
+            "serviceProviderConfiguration": {
+              "connectionName": "ado-pipelines_#workflowname#",
+              "operationId": "runs-run-pipeline",
+              "serviceProviderId": "/serviceProviders/ado-pipelines"
+            }
+          },
+          "runAfter": {}
+        },
+        "Response": {
+          "type": "Response",
+          "kind": "Http",
+          "inputs": {
+            "statusCode": 202,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "runId": "@body('Queue_pipeline')?['id']",
+              "state": "@body('Queue_pipeline')?['state']",
+              "webLink": "@body('Queue_pipeline')?['_links']?['web']?['href']"
+            }
+          },
+          "runAfter": {
+            "Queue_pipeline": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "Request",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "pipelineId": 42,
+        "templateParameters": {
+          "environment": "test"
+        }
+      }
+    }
+  },
+  "mocks": {
+    "Queue_pipeline": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/Project/_apis/pipelines/42/runs/4821"
+            },
+            "web": {
+              "href": "https://dev.azure.com/example/Project/_build/results?buildId=4821"
+            }
+          },
+          "variables": {},
+          "templateParameters": {
+            "environment": "test"
+          },
+          "pipeline": {
+            "url": "https://dev.azure.com/example/Project/_apis/pipelines/42",
+            "id": 42,
+            "revision": 1,
+            "name": "sample-pipeline",
+            "folder": "\\"
+          },
+          "state": "inProgress",
+          "createdDate": "2026-01-01T00:00:00Z",
+          "url": "https://dev.azure.com/example/Project/_apis/pipelines/42/runs/4821",
+          "id": 4821,
+          "name": "20260101.1"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-pipelines_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-pipelines"
+    }
+  }
+}
