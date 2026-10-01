@@ -85,6 +85,30 @@ schema. Older copies of templates using `automation` must be reclassified by
 purpose rather than renamed to `ai`. This repository does not configure portal
 category controls or default gallery filters.
 
+## Template configuration
+
+After importing a template, connect each service and replace example resource
+locations and recipients before running against live services. The following
+templates include sample trigger data and mocked connector outputs; AI agent
+actions still require a configured model connection.
+
+| Template | Configuration before a live run |
+| --- | --- |
+| [Azure Key Vault secret rotation](templates/automate-azure-key-vault-secret-rotation/manifest.json) | Set the Key Vault connection and `Update_Secret` vault hostname to the same vault, authorize the workflow's managed identity to update secrets, and select the Teams approval team/channel. Approved updates create a new secret value and expiration; coordinate the change with downstream consumers. |
+| [Excel feedback summary](templates/excel-feedback-ai-teams-email/manifest.json) | Select the feedback workbook/table, Teams team/channel, and email recipient. |
+| [Gmail attachments to Google Drive](templates/gmail-email-attachments-google-drive/manifest.json) | Select the Gmail label and destination Google Drive folder. |
+| [Google Sheets invoice reminders](templates/google-sheets-gmail-invoice-reminders/manifest.json) | Update the spreadsheet, worksheet, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
+| [Email invoice extraction to Excel](templates/invoice-docintel-ai-excel/manifest.json) | Select the Outlook folder, Document Intelligence connection, and Excel workbook/table with the seven invoice-field columns used by `Add_Invoice_Row`. The first attachment must be the invoice PDF. |
+| [Office 365 attachments to OneDrive for Business](templates/office365-email-attachments-onedrive/manifest.json) | Select the Outlook mail folder and destination OneDrive for Business folder. |
+| [Office 365 attachments to SharePoint](templates/office365-email-attachments-sharepoint/manifest.json) | Select the Outlook mail folder, SharePoint site, and document-library folder. |
+| [Outlook.com attachments to OneDrive](templates/outlook-email-attachments-onedrive/manifest.json) | Select the Outlook.com mail folder and destination personal OneDrive folder. |
+| [Google Sheets feedback summary](templates/sheets-feedback-ai-gmail/manifest.json) | Replace the Google Sheet file id, select the feedback worksheet, and set the Gmail recipient. |
+| [Excel invoice reminders with Outlook.com](templates/weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
+
+Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
+the overdue, due-soon, and future-invoice cases relative to the day of a test run.
+Keep redacted mock values as `"***"`; never replace them with real credentials.
+
 ## Contributing a template
 
 1. Build and test your workflow in the Project Auto portal.

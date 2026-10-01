@@ -1,0 +1,215 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/ProjectAutoTemplates/main/schemas/template.schema.json",
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "sheets-feedback-ai-gmail",
+    "name": "Summarize Google Sheets Feedback with AI",
+    "description": "Reads feedback rows from Google Sheets, creates a concise sentiment and improvement report with AI, and emails the report through Gmail.",
+    "category": [
+      "ai",
+      "support",
+      "summarization"
+    ],
+    "tags": [
+      "feedback",
+      "sentiment",
+      "google-sheets",
+      "gmail"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/googlesheet",
+      "/managedApis/gmail",
+      "connectionProviders/agent"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1
+          }
+        }
+      },
+      "actions": {
+        "Get_Feedback_Rows": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/googlesheet",
+              "operationId": "GetItems",
+              "connection": {
+                "referenceName": "google-sheets_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/datasets/${encodeURIComponent(encodeURIComponent('REPLACE_WITH_GOOGLE_SHEET_FILE_ID'))}/tables/${encodeURIComponent('Feedback')}/items"
+          },
+          "runAfter": {}
+        },
+        "Summarize_Feedback": {
+          "type": "Agent",
+          "inputs": {
+            "modelConfigurations": {
+              "model1": {
+                "referenceName": "agent_#workflowname#"
+              }
+            },
+            "parameters": {
+              "deploymentId": "gpt-5.2",
+              "agentModelType": "AzureOpenAI",
+              "agentModelSettings": {
+                "deploymentModelProperties": {
+                  "name": "gpt-5.2",
+                  "format": "OpenAI"
+                }
+              },
+              "messages": [
+                {
+                  "role": "System",
+                  "content": "You summarize customer feedback. Produce a short, readable report with: (1) one Overall sentiment line, (2) one concise sentiment line for each feedback question, and (3) a few constructive suggestions for improvement grounded in the feedback. Distinguish positive, neutral, mixed, and negative responses. Do not invent facts."
+                },
+                {
+                  "role": "User",
+                  "content": "Summarize these Google Sheets feedback rows:\n${body('Get_Feedback_Rows')?.value}"
+                }
+              ]
+            }
+          },
+          "runAfter": {
+            "Get_Feedback_Rows": [
+              "Succeeded"
+            ]
+          },
+          "limit": {
+            "count": 60,
+            "timeout": "PT1H"
+          }
+        },
+        "Email_Feedback_Summary": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/gmail",
+              "operationId": "SendEmailV2",
+              "connection": {
+                "referenceName": "gmail_#workflowname#"
+              }
+            },
+            "method": "post",
+            "path": "/v2/Mail",
+            "body": {
+              "To": "feedback-owner@example.com",
+              "Subject": "Feedback summary report",
+              "Body": "${body('Summarize_Feedback')?.lastAssistantMessage}",
+              "Importance": "Normal"
+            }
+          },
+          "runAfter": {
+            "Summarize_Feedback": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "Recurrence",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "Get_Feedback_Rows": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "value": [
+            {
+              "Respondent": "Avery",
+              "How easy was setup?": "Very easy",
+              "How useful are the reports?": "Very useful",
+              "How was support?": "Helpful and quick",
+              "Comments": "The workflow saved me time."
+            },
+            {
+              "Respondent": "Blake",
+              "How easy was setup?": "Neither easy nor difficult",
+              "How useful are the reports?": "Somewhat useful",
+              "How was support?": "Neutral",
+              "Comments": "It works, but the report layout could be clearer."
+            },
+            {
+              "Respondent": "Casey",
+              "How easy was setup?": "Difficult",
+              "How useful are the reports?": "Not useful",
+              "How was support?": "Slow",
+              "Comments": "Setup instructions were confusing and I could not find key metrics."
+            },
+            {
+              "Respondent": "Devon",
+              "How easy was setup?": "Easy",
+              "How useful are the reports?": "Very useful",
+              "How was support?": "Helpful",
+              "Comments": "Good experience overall."
+            },
+            {
+              "Respondent": "Emery",
+              "How easy was setup?": "Neither easy nor difficult",
+              "How useful are the reports?": "Neither useful nor unhelpful",
+              "How was support?": "Acceptable",
+              "Comments": "More examples would help."
+            },
+            {
+              "Respondent": "Finley",
+              "How easy was setup?": "Very difficult",
+              "How useful are the reports?": "Somewhat useful",
+              "How was support?": "Unhelpful",
+              "Comments": "The data is valuable, but onboarding and support need improvement."
+            }
+          ]
+        }
+      }
+    },
+    "Email_Feedback_Summary": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {},
+        "body": {}
+      }
+    }
+  },
+  "connections": {
+    "google-sheets_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/googlesheet"
+    },
+    "gmail_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/gmail"
+    },
+    "agent_#workflowname#": {
+      "connectorType": "agent",
+      "apiId": "connectionProviders/agent"
+    }
+  }
+}

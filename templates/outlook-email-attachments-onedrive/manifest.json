@@ -1,0 +1,170 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "outlook-email-attachments-onedrive",
+    "name": "Save Outlook.com email attachments to personal OneDrive",
+    "description": "When an Outlook.com email with attachments arrives in a selected mail folder, saves every attachment sequentially to a selected personal OneDrive folder.",
+    "category": [
+      "communication",
+      "document-processing"
+    ],
+    "tags": [
+      "email",
+      "attachments",
+      "outlook.com",
+      "onedrive"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/outlook",
+      "/managedApis/onedrive"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_new_email_arrives_V2": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/outlook",
+              "operationId": "OnNewEmailV2",
+              "connection": {
+                "referenceName": "outlook_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/v2/Mail/OnNewEmail",
+            "queries": {
+              "folderPath": "Inbox",
+              "importance": "Any",
+              "fetchOnlyWithAttachment": true,
+              "includeAttachments": true
+            }
+          },
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 3
+          },
+          "splitOn": "${triggerBody()?.value}"
+        }
+      },
+      "actions": {
+        "For_each_attachment": {
+          "type": "Foreach",
+          "foreach": "${triggerBody()?.Attachments}",
+          "actions": {
+            "Create_file": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/managedApis/onedrive",
+                  "operationId": "CreateFile",
+                  "connection": {
+                    "referenceName": "onedrive_#workflowname#"
+                  }
+                },
+                "method": "post",
+                "path": "/datasets/default/files",
+                "queries": {
+                  "folderPath": "/Email Attachments",
+                  "name": "${items('For_each_attachment')?.Name}"
+                },
+                "body": "${base64ToBinary(items('For_each_attachment')?.ContentBytes)}"
+              },
+              "metadata": {
+                "swaggerPathTemplate": "/{connectionId}/datasets/default/files"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {},
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_a_new_email_arrives_V2",
+    "outputs": {
+      "method": "GET",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "folderPath": "Inbox",
+        "importance": "Any",
+        "fetchOnlyWithAttachment": true,
+        "includeAttachments": true
+      },
+      "body": {
+        "value": [
+          {
+            "From": "sender@example.com",
+            "To": "recipient@example.com",
+            "Subject": "Validation email with attachments",
+            "HasAttachment": true,
+            "Id": "mock-message-001",
+            "Attachments": [
+              {
+                "Id": "mock-attachment-001",
+                "Name": "first-note.txt",
+                "ContentBytes": "Rmlyc3QgYXR0YWNobWVudA==",
+                "ContentType": "text/plain",
+                "Size": 16,
+                "IsInline": false
+              },
+              {
+                "Id": "mock-attachment-002",
+                "Name": "second-note.txt",
+                "ContentBytes": "U2Vjb25kIGF0dGFjaG1lbnQ=",
+                "ContentType": "text/plain",
+                "Size": 17,
+                "IsInline": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "mocks": {
+    "Create_file": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "201",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "Id": "mock-created-file-id",
+          "Name": "mock-created-file.txt",
+          "Path": "/Email Attachments/mock-created-file.txt",
+          "Size": 16,
+          "MediaType": "text/plain",
+          "LastModified": "2026-09-23T19:48:17Z",
+          "LastModifiedBy": "Otto validation"
+        }
+      }
+    }
+  },
+  "connections": {
+    "outlook_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/outlook"
+    },
+    "onedrive_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/onedrive"
+    }
+  }
+}

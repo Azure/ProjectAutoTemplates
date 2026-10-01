@@ -1,0 +1,169 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "gmail-email-attachments-google-drive",
+    "name": "Save Gmail attachments to Google Drive",
+    "description": "When Gmail receives a message with attachments, saves every attachment sequentially to a selected Google Drive folder. Configure the Gmail label and Google Drive folder in the connector fields after import.",
+    "category": [
+      "communication",
+      "document-processing"
+    ],
+    "tags": [
+      "gmail",
+      "email",
+      "attachments",
+      "google-drive",
+      "file"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/gmail",
+      "/managedApis/googledrive"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "When_a_new_email_arrives": {
+          "type": "ApiConnection",
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 3
+          },
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/gmail",
+              "operationId": "OnNewEmail",
+              "connection": {
+                "referenceName": "gmail_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/Mail/OnNewEmail",
+            "queries": {
+              "label": "INBOX",
+              "fetchOnlyWithAttachments": true,
+              "includeAttachments": true
+            }
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/Mail/OnNewEmail"
+          }
+        }
+      },
+      "actions": {
+        "For_each_attachment": {
+          "type": "Foreach",
+          "foreach": "${triggerBody()?.['Attachments']}",
+          "actions": {
+            "Create_file_in_Google_Drive": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/managedApis/googledrive",
+                  "operationId": "CreateFileV2",
+                  "connection": {
+                    "referenceName": "googledrive_#workflowname#"
+                  }
+                },
+                "method": "post",
+                "path": "/datasets/default/v2/files",
+                "queries": {
+                  "folderId": "",
+                  "name": "${items('For_each_attachment')?.['Name']}",
+                  "queryParametersSingleEncoded": true
+                },
+                "body": "${base64ToBinary(items('For_each_attachment')?.['ContentBytes'])}"
+              },
+              "metadata": {
+                "swaggerPathTemplate": "/{connectionId}/datasets/default/v2/files"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {},
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          }
+        }
+      },
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_a_new_email_arrives",
+    "outputs": {
+      "method": "GET",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "label": "INBOX",
+        "fetchOnlyWithAttachments": true,
+        "includeAttachments": true
+      },
+      "body": {
+        "From": "sender@example.com",
+        "SenderName": "Example Sender",
+        "To": "recipient@example.com",
+        "Subject": "Files for Google Drive",
+        "HasAttachments": true,
+        "Attachments": [
+          {
+            "Name": "first-file.txt",
+            "ContentBytes": "Rmlyc3QgZmlsZSBjb250ZW50",
+            "ContentType": "text/plain"
+          },
+          {
+            "Name": "second-file.txt",
+            "ContentBytes": "U2Vjb25kIGZpbGUgY29udGVudA==",
+            "ContentType": "text/plain"
+          }
+        ],
+        "Id": "sample-gmail-message-id",
+        "ThreadId": "sample-gmail-thread-id"
+      }
+    }
+  },
+  "mocks": {
+    "Create_file_in_Google_Drive": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "Id": "mock-google-drive-file-id",
+          "Name": "mock-attachment.txt",
+          "DisplayName": "mock-attachment.txt",
+          "Path": "/mock-attachment.txt",
+          "FolderId": "mock-destination-folder-id",
+          "FolderPath": "/",
+          "LastModified": "2026-09-23T19:59:01Z",
+          "Size": 20,
+          "MediaType": "text/plain",
+          "IsFolder": false,
+          "ETag": "mock-etag",
+          "FileLocator": "mock-file-locator"
+        }
+      }
+    }
+  },
+  "connections": {
+    "gmail_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/gmail"
+    },
+    "googledrive_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/googledrive"
+    }
+  }
+}
