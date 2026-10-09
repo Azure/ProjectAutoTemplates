@@ -1,5 +1,5 @@
 # Project Auto Templates
-
+ex
 [![Validate templates](https://github.com/Azure/ProjectAutoTemplates/actions/workflows/validate.yml/badge.svg)](https://github.com/Azure/ProjectAutoTemplates/actions/workflows/validate.yml)
 
 This repository hosts **templates** for Project Auto: self-contained `manifest.json` bundles
