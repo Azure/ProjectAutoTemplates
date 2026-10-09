@@ -41,6 +41,13 @@ Every template `manifest.json` must satisfy the JSON Schema in
 - `connections` — connection references; names must end with the `_#workflowname#`
   placeholder so they can be rewritten at import time
 
+The CLI also checks relationships the envelope schema cannot express:
+`trigger.name` must match a workflow trigger, mock keys must match action names
+(including nested branches, loops, scopes, and agent tools), and every connection
+must be both declared and referenced by a connector or agent model. All names
+are case-sensitive. Mentioning a connection in arbitrary text or sample data does
+not count as referencing it.
+
 ## Template categories
 
 `metadata.category` uses the lowercase ids below, enforced by the shared schema.
@@ -116,15 +123,31 @@ Keep redacted mock values as `"***"`; never replace them with real credentials.
    JSON download. The portal scrubs credentials (auth headers, SAS signatures,
    connection strings) automatically — never add them back.
 3. Verify the template locally with the **Import from json** card in the templates gallery.
-4. Open a pull request that adds `templates/<template-id>/manifest.json` **and** appends
-   the id to `templates/manifest.json`.
+4. Add `templates/<template-id>/manifest.json` **and** append the id to
+   `templates/manifest.json`. Folder ids must start with a letter or digit and
+   contain only letters, digits, hyphens, or underscores.
+5. Run the preflight below, then open a pull request using the repository checklist.
 
-Every PR runs the validation suite. To run it locally:
+Run the same preflight locally that GitHub runs on every PR:
 
 ```bash
-pnpm install
-pnpm run test
+pnpm install --frozen-lockfile
+pnpm run validate
 ```
+
+`pnpm run validate` runs TypeScript checking, validates the entire template
+catalog, and runs schema and validator regression tests. For a faster check while
+editing, `pnpm run test` skips TypeScript checking; use the full preflight before
+opening or updating a PR.
+
+Validation is read-only and reports file paths and fields with suggested fixes.
+In GitHub Actions, failures also appear as file annotations. Unlisted folders are
+validated too, so their content errors can be fixed alongside the missing index
+entry. The published tree accepts only the index, regular template directories,
+and each template's `manifest.json` plus optional `.png`/`.svg` files; symbolic
+links and nested asset directories are rejected. JSON manifests must be at most
+1 MiB (1,048,576 bytes). Secret lint runs even when the envelope is invalid,
+and diagnostics do not print detected credential values or invalid JSON snippets.
 
 ## GitHub issue to Azure DevOps Boards setup
 

@@ -3,11 +3,11 @@
  *
  * Validates the templates/ tree (which mirrors the published blob container
  * exactly) and every template document:
- *   1. templates/manifest.json is a JSON array of unique folder ids, and every
- *      id has a matching folder (case-sensitive) containing manifest.json.
+ *   1. templates/manifest.json is a JSON array of unique, safe folder ids, and
+ *      every id has a matching regular folder (case-sensitive).
  *   2. Every folder under templates/ is listed in the index, and contains
  *      only expected files (manifest.json, plus optional card images).
- *   3. Each manifest.json is < 1 MB, parses, and passes the template envelope
+ *   3. Each manifest.json is at most 1 MiB, parses, and passes the template envelope
  *      JSON Schema (schemas/template.schema.json — the language-neutral source
  *      of truth shared with the portal repo). The embedded workflow.definition
  *      is governed by the official Azure Logic Apps schema pinned in its
@@ -19,8 +19,10 @@
  *   6. No credential-bearing values (headers, SAS/query secrets, bearer
  *      tokens, connection strings) — the portal's generate flow scrubs these
  *      to "***"; this is the backstop.
- *   7. Connection names use the _#workflowname# placeholder and are actually
- *      referenced by the workflow definition.
+ *   7. Trigger samples and mocks reference existing workflow steps, including
+ *      nested actions and agent tools.
+ *   8. Connection names use the _#workflowname# placeholder; declarations and
+ *      connector/model references agree in both directions.
  */
 
 import * as fs from 'fs';
@@ -30,7 +32,7 @@ import type { ErrorObject } from 'ajv';
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const SCHEMA_PATH = path.join(__dirname, 'schemas', 'template.schema.json');
-const MAX_TEMPLATE_BYTES = 1024 * 1024; // 1 MB
+const MAX_TEMPLATE_BYTES = 1024 * 1024; // 1 MiB
 const REQUIRED_SOURCE = 'builtin';
 const REQUIRED_AUTHOR = 'Microsoft';
 
@@ -145,12 +147,14 @@ function findStructuralSecrets(value: unknown, docPath: string[] = []): string[]
 /** The fields this script reads after schema validation has passed. */
 interface Template {
   metadata: { id: string; author: string; source: string };
-  workflow: unknown;
+  workflow: { definition: Record<string, unknown> };
+  trigger: { name: string };
+  mocks?: Record<string, unknown>;
   connections?: Record<string, unknown>;
 }
 
 const ajv = new Ajv2020({ allErrors: true, allowUnionTypes: true });
-const validateTemplateSchema = ajv.compile(
+const validateTemplateSchema = ajv.compile<Template>(
   JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8')),
 );
 
@@ -164,11 +168,14 @@ function formatSchemaErrors(errors: ErrorObject[] | null | undefined): string[] 
   const out: string[] = [];
   for (const err of errors ?? []) {
     if (err.keyword === 'anyOf') continue;
-    const docPath = err.instancePath
+    const segments = err.instancePath
       .split('/')
       .slice(1)
-      .map((seg) => seg.replace(/~1/g, '/').replace(/~0/g, '~'))
-      .join('.');
+      .map((seg) => seg.replace(/~1/g, '/').replace(/~0/g, '~'));
+    if (err.keyword === 'required') segments.push(err.params.missingProperty);
+    if (err.keyword === 'additionalProperties') segments.push(err.params.additionalProperty);
+    if (err.keyword === 'propertyNames') segments.push(err.params.propertyName);
+    const docPath = segments.join('.');
     const message = `${docPath ? `${docPath}: ` : ''}${err.message ?? 'is invalid'}`;
     if (!seen.has(message)) {
       seen.add(message);
@@ -182,149 +189,311 @@ function formatSchemaErrors(errors: ErrorObject[] | null | undefined): string[] 
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Case-sensitive existence check — Windows/macOS filesystems would otherwise
- *  pass a wrong-case id that breaks the case-sensitive blob layout. */
-function existsCaseSensitive(dir: string, name: string): boolean {
-  return fs.readdirSync(dir).includes(name);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function listTemplateFolders(): string[] {
-  return fs
-    .readdirSync(TEMPLATES_DIR, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-// ---------------------------------------------------------------------------
-// Validation
-// ---------------------------------------------------------------------------
-
-const errors: string[] = [];
-
-function fail(message: string): void {
-  errors.push(message);
+function jsonErrorMessage(error: unknown): string {
+  // JSON.parse errors can include source text containing an unredacted secret.
+  const location = errorMessage(error).match(/position \d+|line \d+ column \d+/g);
+  return `invalid JSON${location ? ` (${location.join(', ')})` : ''}`;
 }
 
-// 0. templates/ tree exists
-if (!fs.existsSync(TEMPLATES_DIR) || !fs.statSync(TEMPLATES_DIR).isDirectory()) {
-  console.error('✖ templates/ directory is missing from the repo root.');
-  process.exit(1);
-}
+const MANAGED_CONNECTION_TYPES = new Set([
+  'ApiConnection',
+  'ApiConnectionWebhook',
+  'ApiConnectionNotification',
+]);
+const SERVICE_PROVIDER_TYPES = new Set(['ServiceProvider', 'ServiceProviderWebhook']);
 
-// 1. Index shape
-const indexPath = path.join(TEMPLATES_DIR, 'manifest.json');
-let index: string[] = [];
-if (!fs.existsSync(indexPath)) {
-  fail('templates/manifest.json: missing');
-} else {
-  try {
-    const parsed: unknown = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-    if (!Array.isArray(parsed) || !parsed.every((v): v is string => typeof v === 'string')) {
-      fail('templates/manifest.json: must be a JSON array of strings');
-    } else {
-      index = parsed;
-      const dupes = index.filter((id, i) => index.indexOf(id) !== i);
-      for (const dupe of new Set(dupes)) {
-        fail(`templates/manifest.json: duplicate id "${dupe}"`);
+function findReferenceErrors(template: Template): string[] {
+  const errors: string[] = [];
+  const actionNames = new Set<string>();
+  const referencedConnections = new Set<string>();
+  const definition = template.workflow.definition;
+  const connections = template.connections ?? {};
+
+  function checkConnection(reference: unknown, docPath: string): void {
+    if (typeof reference !== 'string' || !/^\S*_#workflowname#$/.test(reference)) {
+      errors.push(`${docPath}: connection reference must end with "_#workflowname#"`);
+      return;
+    }
+    referencedConnections.add(reference);
+    if (!Object.hasOwn(connections, reference)) {
+      errors.push(`${docPath}: connection "${reference}" is not declared in connections`);
+    }
+  }
+
+  function visitStep(step: Record<string, unknown>, docPath: string): void {
+    const inputs = step.inputs;
+    if (typeof step.type === 'string' && MANAGED_CONNECTION_TYPES.has(step.type)) {
+      const host = isRecord(inputs) ? inputs.host : undefined;
+      const reference = isRecord(host) && isRecord(host.connection) ? host.connection.referenceName : undefined;
+      checkConnection(reference, `${docPath}.inputs.host.connection.referenceName`);
+    }
+    if (typeof step.type === 'string' && SERVICE_PROVIDER_TYPES.has(step.type)) {
+      const provider = isRecord(inputs) ? inputs.serviceProviderConfiguration : undefined;
+      checkConnection(
+        isRecord(provider) ? provider.connectionName : undefined,
+        `${docPath}.inputs.serviceProviderConfiguration.connectionName`,
+      );
+    }
+    if (step.type === 'Agent' && isRecord(inputs) && isRecord(inputs.modelConfigurations)) {
+      for (const [name, model] of Object.entries(inputs.modelConfigurations)) {
+        if (isRecord(model) && Object.hasOwn(model, 'referenceName')) {
+          checkConnection(model.referenceName, `${docPath}.inputs.modelConfigurations.${name}.referenceName`);
+        }
       }
     }
-  } catch (e) {
-    fail(`templates/manifest.json: invalid JSON — ${(e as Error).message}`);
   }
-}
 
-// 2. Index ↔ folders agree, case-sensitively; folders hold only expected files
-const folders = listTemplateFolders();
-for (const id of index) {
-  if (!existsCaseSensitive(TEMPLATES_DIR, id)) {
-    fail(`templates/manifest.json: listed id "${id}" has no matching folder (case-sensitive)`);
-  } else if (!existsCaseSensitive(path.join(TEMPLATES_DIR, id), 'manifest.json')) {
-    fail(`templates/${id}: folder exists but has no manifest.json`);
-  }
-}
-for (const folder of folders) {
-  if (!index.includes(folder)) {
-    fail(`templates/${folder}: template folder exists but is not listed in templates/manifest.json — add it to the index or delete the folder`);
-  }
-  for (const entry of fs.readdirSync(path.join(TEMPLATES_DIR, folder))) {
-    if (entry !== 'manifest.json' && !ALLOWED_EXTRA_FILES.test(entry)) {
-      fail(`templates/${folder}/${entry}: unexpected file — template folders may only contain manifest.json and image assets`);
+  function visitActions(value: unknown, docPath: string): void {
+    if (!isRecord(value)) {
+      errors.push(`${docPath}: must be an object of workflow actions`);
+      return;
     }
-  }
-}
-
-// 3–7. Per-template checks
-for (const id of index) {
-  const templatePath = path.join(TEMPLATES_DIR, id, 'manifest.json');
-  if (!fs.existsSync(templatePath)) continue; // already reported above
-
-  const label = `templates/${id}/manifest.json`;
-  const raw = fs.readFileSync(templatePath, 'utf8');
-
-  if (Buffer.byteLength(raw, 'utf8') > MAX_TEMPLATE_BYTES) {
-    fail(`${label}: exceeds ${MAX_TEMPLATE_BYTES / 1024 / 1024} MB size limit`);
-    continue;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    fail(`${label}: invalid JSON — ${(e as Error).message}`);
-    continue;
-  }
-
-  if (!validateTemplateSchema(parsed)) {
-    for (const issue of formatSchemaErrors(validateTemplateSchema.errors)) {
-      fail(`${label}: schema — ${issue}`);
-    }
-    continue;
-  }
-  const template = parsed as unknown as Template;
-
-  if (template.metadata.id !== id) {
-    fail(`${label}: metadata.id is "${template.metadata.id}" but must match the folder name "${id}"`);
-  }
-  if (template.metadata.source !== REQUIRED_SOURCE) {
-    fail(`${label}: metadata.source is "${template.metadata.source}" but must be "${REQUIRED_SOURCE}"`);
-  }
-  if (template.metadata.author !== REQUIRED_AUTHOR) {
-    fail(`${label}: metadata.author is "${template.metadata.author}" but must be "${REQUIRED_AUTHOR}"`);
-  }
-
-  // Secret lint — structural walk + raw-text patterns
-  for (const issue of findStructuralSecrets(parsed)) {
-    fail(`${label}: secret lint — ${issue}`);
-  }
-  for (const { name, pattern } of SECRET_TEXT_PATTERNS) {
-    if (pattern.test(raw)) {
-      fail(`${label}: secret lint — contains what looks like a ${name}; scrub it to "${REDACTED}" before contributing`);
+    for (const [name, action] of Object.entries(value)) {
+      const actionPath = `${docPath}.${name}`;
+      if (!isRecord(action)) {
+        errors.push(`${actionPath}: action must be an object`);
+        continue;
+      }
+      actionNames.add(name);
+      visitStep(action, actionPath);
+      if (Object.hasOwn(action, 'actions')) visitActions(action.actions, `${actionPath}.actions`);
+      for (const branch of ['else', 'default']) {
+        if (!Object.hasOwn(action, branch)) continue;
+        const container = action[branch];
+        if (!isRecord(container)) {
+          errors.push(`${actionPath}.${branch}: must be an object`);
+        } else if (Object.hasOwn(container, 'actions')) {
+          visitActions(container.actions, `${actionPath}.${branch}.actions`);
+        }
+      }
+      for (const collection of ['cases', 'tools']) {
+        if (!Object.hasOwn(action, collection)) continue;
+        const containers = action[collection];
+        if (!isRecord(containers)) {
+          errors.push(`${actionPath}.${collection}: must be an object`);
+          continue;
+        }
+        for (const [containerName, container] of Object.entries(containers)) {
+          const containerPath = `${actionPath}.${collection}.${containerName}`;
+          if (!isRecord(container)) {
+            errors.push(`${containerPath}: must be an object`);
+          } else if (Object.hasOwn(container, 'actions')) {
+            visitActions(container.actions, `${containerPath}.actions`);
+          }
+        }
+      }
     }
   }
 
-  // Connection placeholder + reference consistency. The schema already
-  // enforces the _#workflowname# suffix on keys; also require the definition
-  // to actually reference each declared connection.
-  const definitionText = JSON.stringify(template.workflow);
-  for (const connectionName of Object.keys(template.connections ?? {})) {
-    if (!definitionText.includes(`"${connectionName}"`)) {
-      fail(`${label}: connections declares "${connectionName}" but the workflow definition never references it`);
+  if (!isRecord(definition.triggers)) {
+    errors.push('workflow.definition.triggers: must be an object of workflow triggers');
+  } else {
+    if (!Object.hasOwn(definition.triggers, template.trigger.name)) {
+      errors.push(`trigger.name: "${template.trigger.name}" does not match a workflow.definition.triggers key (case-sensitive)`);
+    }
+    for (const [name, trigger] of Object.entries(definition.triggers)) {
+      if (!isRecord(trigger)) {
+        errors.push(`workflow.definition.triggers.${name}: trigger must be an object`);
+      } else {
+        visitStep(trigger, `workflow.definition.triggers.${name}`);
+      }
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Report
-// ---------------------------------------------------------------------------
-
-if (errors.length > 0) {
-  console.error(`\n✖ Validation failed with ${errors.length} error(s):\n`);
-  for (const error of errors) {
-    console.error(`  • ${error}`);
+  visitActions(definition.actions, 'workflow.definition.actions');
+  for (const name of Object.keys(template.mocks ?? {})) {
+    if (!actionNames.has(name)) {
+      errors.push(`mocks.${name}: no matching workflow action (case-sensitive); rename or remove this mock`);
+    }
   }
-  console.error('');
-  process.exit(1);
+  for (const name of Object.keys(connections)) {
+    if (!referencedConnections.has(name)) {
+      errors.push(`connections.${name}: declared connection is not referenced by a workflow connector or agent model; remove it or fix the reference`);
+    }
+  }
+  return errors;
 }
 
-console.log(`✔ ${index.length} template(s) validated successfully.`);
+export interface ValidationIssue {
+  file: string;
+  message: string;
+}
+
+export interface ValidationResult {
+  templateCount: number;
+  errors: ValidationIssue[];
+}
+
+export function validateTemplates(templatesDir = TEMPLATES_DIR): ValidationResult {
+  const errors: ValidationIssue[] = [];
+  const result: ValidationResult = { templateCount: 0, errors };
+  const fail = (file: string, message: string): void => {
+    errors.push({ file, message });
+  };
+
+  function readDirectory(dir: string, label: string): fs.Dirent[] | undefined {
+    try {
+      if (!fs.lstatSync(dir).isDirectory()) {
+        fail(label, 'must be a regular directory, not a file or symbolic link');
+        return;
+      }
+      return fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    } catch (error) {
+      fail(label, `unable to read directory: ${errorMessage(error)}`);
+    }
+  }
+
+  function readFile(filePath: string, label: string): string | undefined {
+    try {
+      const stat = fs.lstatSync(filePath);
+      if (!stat.isFile()) {
+        fail(label, 'must be a regular file, not a directory or symbolic link');
+        return;
+      }
+      if (stat.size > MAX_TEMPLATE_BYTES) {
+        fail(label, `exceeds ${MAX_TEMPLATE_BYTES} byte (1 MiB) size limit`);
+        return;
+      }
+      return fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+      fail(label, `unable to read file: ${errorMessage(error)}`);
+    }
+  }
+
+  const entries = readDirectory(templatesDir, 'templates');
+  if (!entries) return result;
+  const indexLabel = 'templates/manifest.json';
+  let index: string[] = [];
+  if (!entries.some((entry) => entry.name === 'manifest.json')) {
+    fail(indexLabel, 'missing; add a JSON array of template folder ids');
+  } else {
+    const rawIndex = readFile(path.join(templatesDir, 'manifest.json'), indexLabel);
+    if (rawIndex !== undefined) {
+      try {
+        const parsed: unknown = JSON.parse(rawIndex);
+        if (!Array.isArray(parsed) || !parsed.every((value): value is string => typeof value === 'string')) {
+          fail(indexLabel, 'must be a JSON array of strings');
+        } else {
+          const seen = new Set<string>();
+          for (const id of parsed) {
+            if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id)) {
+              fail(indexLabel, `invalid folder id "${id}"; use letters, digits, hyphens, or underscores, starting with a letter or digit`);
+              continue;
+            }
+            if (seen.has(id)) fail(indexLabel, `duplicate id "${id}"`);
+            seen.add(id);
+          }
+          index = [...seen];
+        }
+      } catch (error) {
+        fail(indexLabel, jsonErrorMessage(error));
+      }
+    }
+  }
+
+  const folders = entries.filter((entry) => entry.name !== 'manifest.json' && entry.isDirectory());
+  for (const entry of entries) {
+    if (entry.name !== 'manifest.json' && !entry.isDirectory()) {
+      fail(`templates/${entry.name}`, 'unexpected entry; only the index and regular template directories are allowed');
+    }
+  }
+  for (const id of index) {
+    if (!folders.some((folder) => folder.name === id)) {
+      fail(indexLabel, `listed id "${id}" has no matching regular folder (case-sensitive)`);
+    }
+  }
+
+  for (const folder of folders) {
+    const id = folder.name;
+    const folderLabel = `templates/${id}`;
+    if (!index.includes(id)) {
+      fail(folderLabel, 'template folder is not listed in templates/manifest.json; add its id to the index or remove the folder');
+    }
+    const folderPath = path.join(templatesDir, id);
+    const files = readDirectory(folderPath, folderLabel);
+    if (!files) continue;
+    for (const entry of files) {
+      if (entry.name === 'manifest.json') continue;
+      if (!entry.isFile() || !ALLOWED_EXTRA_FILES.test(entry.name)) {
+        fail(`${folderLabel}/${entry.name}`, 'unexpected entry; template folders may only contain regular manifest.json, .png, and .svg files');
+      }
+    }
+    if (!files.some((entry) => entry.name === 'manifest.json')) {
+      fail(folderLabel, 'missing manifest.json (case-sensitive)');
+      continue;
+    }
+    const label = `${folderLabel}/manifest.json`;
+    const raw = readFile(path.join(folderPath, 'manifest.json'), label);
+    if (raw === undefined) continue;
+    for (const { name, pattern } of SECRET_TEXT_PATTERNS) {
+      if (pattern.test(raw)) {
+        fail(label, `secret lint: contains what looks like a ${name}; scrub it to "${REDACTED}" before contributing`);
+      }
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      fail(label, jsonErrorMessage(error));
+      continue;
+    }
+    for (const issue of findStructuralSecrets(parsed)) {
+      fail(label, `secret lint: ${issue}`);
+    }
+    if (!validateTemplateSchema(parsed)) {
+      for (const issue of formatSchemaErrors(validateTemplateSchema.errors)) {
+        fail(label, `schema: ${issue}`);
+      }
+      continue;
+    }
+    if (parsed.metadata.id !== id) {
+      fail(label, `metadata.id is "${parsed.metadata.id}" but must match the folder name "${id}"`);
+    }
+    if (parsed.metadata.source !== REQUIRED_SOURCE) {
+      fail(label, `metadata.source is "${parsed.metadata.source}" but must be "${REQUIRED_SOURCE}"`);
+    }
+    if (parsed.metadata.author !== REQUIRED_AUTHOR) {
+      fail(label, `metadata.author is "${parsed.metadata.author}" but must be "${REQUIRED_AUTHOR}"`);
+    }
+    for (const issue of findReferenceErrors(parsed)) {
+      fail(label, issue);
+    }
+    result.templateCount++;
+  }
+  return result;
+}
+
+function escapeAnnotation(value: string): string {
+  return value.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+}
+
+export function runValidation(templatesDir = TEMPLATES_DIR): number {
+  const { errors, templateCount } = validateTemplates(templatesDir);
+  if (errors.length > 0) {
+    console.error(`\n✖ Validation failed with ${errors.length} error(s):\n`);
+    for (const { file, message } of errors) {
+      const readable = `${file}: ${message}`.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+      console.error(`  • ${readable}`);
+      if (process.env.GITHUB_ACTIONS === 'true') {
+        const annotationFile = escapeAnnotation(file).replace(/:/g, '%3A').replace(/,/g, '%2C');
+        console.error(`::error file=${annotationFile}::${escapeAnnotation(message)}`);
+      }
+    }
+    console.error('\nFix the errors above, then run "pnpm run validate" before opening or updating the PR.\n');
+    return 1;
+  }
+  console.log(`✔ ${templateCount} template(s) validated successfully.`);
+  return 0;
+}
+
+if (require.main === module) {
+  process.exitCode = runValidation();
+}
