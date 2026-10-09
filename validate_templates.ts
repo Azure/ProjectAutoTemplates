@@ -1,8 +1,8 @@
 /**
  * Template repo validator — run via `pnpm test` (tsx validate_templates.ts).
  *
- * Validates the templates/ tree (which mirrors the published blob container
- * exactly) and every template document:
+ * Validates the templates/ catalog tree and every template document.
+ * The root README.md is documentation, not a catalog entry:
  *   1. templates/manifest.json is a JSON array of unique, safe folder ids, and
  *      every id has a matching regular folder (case-sensitive).
  *   2. Every folder under templates/ is listed in the index, and contains
@@ -398,10 +398,16 @@ export function validateTemplates(templatesDir = TEMPLATES_DIR): ValidationResul
     }
   }
 
-  const folders = entries.filter((entry) => entry.name !== 'manifest.json' && entry.isDirectory());
+  const folders = entries.filter(
+    (entry) => entry.name !== 'manifest.json' && entry.name !== 'README.md' && entry.isDirectory(),
+  );
   for (const entry of entries) {
-    if (entry.name !== 'manifest.json' && !entry.isDirectory()) {
-      fail(`templates/${entry.name}`, 'unexpected entry; only the index and regular template directories are allowed');
+    if (entry.name === 'README.md') {
+      if (!entry.isFile()) {
+        fail('templates/README.md', 'must be a regular file, not a directory or symbolic link');
+      }
+    } else if (entry.name !== 'manifest.json' && !entry.isDirectory()) {
+      fail(`templates/${entry.name}`, 'unexpected entry; only the index, a regular README.md, and regular template directories are allowed');
     }
   }
   for (const id of index) {

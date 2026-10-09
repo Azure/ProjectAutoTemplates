@@ -78,6 +78,36 @@ test('accepts a valid template and regular card images', (t) => {
   assert.deepEqual(f.validate(), { templateCount: 1, errors: [] });
 });
 
+test('accepts a regular catalog README without indexing or counting it as a template', (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.templatesDir, 'README.md'), '# Template reference\n');
+  assert.deepEqual(f.validate(), { templateCount: 1, errors: [] });
+});
+
+for (const name of ['readme.md', 'Readme.md', 'README.MD', 'notes.md']) {
+  test(`rejects unapproved catalog documentation ${name}`, (t) => {
+    const f = fixture(t);
+    fs.writeFileSync(path.join(f.templatesDir, name), '# Documentation\n');
+    assert.match(messages(f.validate()), new RegExp(`templates/${name.replace('.', '\\.')}: unexpected entry`));
+  });
+}
+
+test('rejects a directory masquerading as the catalog README', (t) => {
+  const f = fixture(t);
+  fs.mkdirSync(path.join(f.templatesDir, 'README.md'));
+  assert.match(messages(f.validate()), /templates\/README.md: must be a regular file/);
+});
+
+test('does not follow a linked catalog README', (t) => {
+  const f = fixture(t);
+  fs.symlinkSync(
+    path.join(f.templatesDir, 'sample-template'),
+    path.join(f.templatesDir, 'README.md'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  assert.match(messages(f.validate()), /templates\/README.md: must be a regular file/);
+});
+
 test('validates every published template with the stronger checks', () => {
   const result = validateTemplates();
   assert.equal(result.errors.length, 0, messages(result));
@@ -162,10 +192,12 @@ test('rejects unexpected root files and template files and image directories', (
   const f = fixture(t);
   fs.writeFileSync(path.join(f.templatesDir, 'extra.json'), '{}');
   fs.writeFileSync(path.join(f.templatesDir, 'sample-template', 'extra.txt'), '');
+  fs.writeFileSync(path.join(f.templatesDir, 'sample-template', 'README.md'), '# Documentation\n');
   fs.mkdirSync(path.join(f.templatesDir, 'sample-template', 'fake.png'));
   const errors = messages(f.validate());
   assert.match(errors, /templates\/extra.json: unexpected entry/);
   assert.match(errors, /sample-template\/extra.txt: unexpected entry/);
+  assert.match(errors, /sample-template\/README.md: unexpected entry/);
   assert.match(errors, /sample-template\/fake.png: unexpected entry/);
 });
 
