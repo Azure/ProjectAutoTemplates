@@ -127,6 +127,7 @@ actions still require a configured model connection.
 
 | Template | Configuration before a live run |
 | --- | --- |
+| [Get a Pull Request (Azure DevOps)](get-a-pull-request-azure-devops/manifest.json) | Bind the Azure DevOps Repos connection and set `Get_pull_request`'s project, repository ID, and pull request ID. Keep its synthetic mock enabled for draft testing; disable the mock only to retrieve a real pull request. The HTTP request starts the workflow; inspect the action output for the pull request details (there is no HTTP Response action). |
 | [Azure Key Vault secret rotation](automate-azure-key-vault-secret-rotation/manifest.json) | Set the Key Vault connection and `Update_Secret` vault hostname to the same vault, authorize the workflow's managed identity to update secrets, and select the Teams approval team/channel. Approved updates create a new secret value and expiration; coordinate the change with downstream consumers. |
 | [Excel feedback summary](excel-feedback-ai-teams-email/manifest.json) | Select the feedback workbook/table, Teams team/channel, and email recipient. |
 | [Gmail attachments to Google Drive](gmail-email-attachments-google-drive/manifest.json) | Select the Gmail label and destination Google Drive folder. |

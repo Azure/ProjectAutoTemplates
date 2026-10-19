@@ -1,0 +1,168 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "get-a-pull-request-azure-devops",
+    "name": "Get a Pull Request (Azure DevOps)",
+    "description": "Retrieve an Azure DevOps pull request when an HTTP request is received. Configure the Azure DevOps Repos connection, project, repository, and pull request ID before running against a live service.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Repos",
+      "Pull requests",
+      "HTTP"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request",
+      "/serviceProviders/ado-repos"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Get_pull_request": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-requests-get",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": ""
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      },
+      "body": null
+    }
+  },
+  "mocks": {
+    "Get_pull_request": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "repository": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "example-repo",
+            "url": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222",
+            "project": {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/_apis/projects/11111111-1111-4111-8111-111111111111",
+              "state": "wellFormed",
+              "revision": 1,
+              "visibility": "private",
+              "lastUpdateTime": "2026-01-01T00:00:00Z"
+            },
+            "size": 1907,
+            "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-repo",
+            "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-repo",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-repo",
+            "isDisabled": false,
+            "isInMaintenance": false
+          },
+          "pullRequestId": 1,
+          "codeReviewId": 1,
+          "status": "active",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "id": "33333333-3333-4333-8333-333333333333",
+            "uniqueName": "developer@example.com"
+          },
+          "creationDate": "2026-01-02T12:00:00Z",
+          "title": "Add example documentation",
+          "sourceRefName": "refs/heads/docs/example",
+          "targetRefName": "refs/heads/main",
+          "mergeStatus": "succeeded",
+          "isDraft": false,
+          "mergeId": "44444444-4444-4444-8444-444444444444",
+          "lastMergeSourceCommit": {
+            "commitId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "url": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "lastMergeTargetCommit": {
+            "commitId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "url": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/commits/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "lastMergeCommit": {
+            "commitId": "cccccccccccccccccccccccccccccccccccccccc",
+            "author": {
+              "name": "Example Developer",
+              "email": "developer@example.com",
+              "date": "2026-01-02T12:00:00Z"
+            },
+            "committer": {
+              "name": "Example Developer",
+              "email": "developer@example.com",
+              "date": "2026-01-02T12:00:00Z"
+            },
+            "comment": "Merge pull request 1 from docs/example into main",
+            "url": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/commits/cccccccccccccccccccccccccccccccccccccccc"
+          },
+          "reviewers": [],
+          "url": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/pullRequests/1",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/pullRequests/1"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222"
+            },
+            "workItems": {
+              "href": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/pullRequests/1/workitems"
+            },
+            "sourceBranch": {
+              "href": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/refs/heads/docs/example"
+            },
+            "targetBranch": {
+              "href": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/refs/heads/main"
+            },
+            "iterations": {
+              "href": "https://dev.azure.com/example/11111111-1111-4111-8111-111111111111/_apis/git/repositories/22222222-2222-4222-8222-222222222222/pullRequests/1/iterations"
+            }
+          },
+          "supportsIterations": true,
+          "artifactId": "vstfs:///Git/PullRequestId/11111111-1111-4111-8111-111111111111%2f22222222-2222-4222-8222-222222222222%2f1"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-repos_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-repos"
+    }
+  }
+}
