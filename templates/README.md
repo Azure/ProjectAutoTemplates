@@ -9,6 +9,7 @@ Use this reference when adding or updating a template. Start with the
 - [Template categories](#template-categories)
 - [Template configuration](#template-configuration)
 - [GitHub issue to Azure DevOps Boards setup](#github-issue-to-azure-devops-boards-setup)
+- [Azure DevOps Boards work item event automation setup](#azure-devops-boards-work-item-event-automation-setup)
 
 ## Directory and publish index
 
@@ -137,6 +138,7 @@ actions still require a configured model connection.
 | [Outlook.com attachments to OneDrive](outlook-email-attachments-onedrive/manifest.json) | Select the Outlook.com mail folder and destination personal OneDrive folder. |
 | [Google Sheets feedback summary](sheets-feedback-ai-gmail/manifest.json) | Replace the Google Sheet file id, select the feedback worksheet, and set the Gmail recipient. |
 | [Excel invoice reminders with Outlook.com](weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
+| [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind both Boards connections to the same organization, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields as described below. |
 
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
@@ -159,3 +161,34 @@ issue's `html_url`, so it follows the configured repository without editing an
 expression. The trigger payload and mocked Boards response are synthetic sample
 data. Keep the Boards action mock enabled for draft testing; disable it only when
 intentionally testing real writes to a configured project.
+
+## Azure DevOps Boards work item event automation setup
+
+The [`scenario-01-work-item-event-automation` template](scenario-01-work-item-event-automation/manifest.json)
+retrieves a newly created work item and then updates its title and description.
+The export's connector operations, expressions, action ordering, and two
+connection references are retained. Live project, area path, team, and assignee
+values are empty so imports do not subscribe to or modify the author's resources.
+
+Before publishing:
+
+1. Bind both Boards connections to the same Azure DevOps organization.
+   `ado-boards_#workflowname#` is used by the trigger and update action;
+   `ado-boards2_#workflowname#` is used by the get action.
+2. Select the same project in the trigger's **Project** (`projectId`) and both
+   actions' **Project** fields. Select the trigger's **Area Path** if needed and
+   the update action's **Team**.
+3. The update action defaults to **Task**. Use a work item type supported by the
+   project's process and create a work item of that type for the live test.
+   Review the sample title and description before enabling real updates. Configure
+   **State** and **Assigned To** as needed, or remove those optional fields from
+   the update rather than submitting empty values.
+4. Use connections authorized to create/remove work item event subscriptions,
+   read work items, and update work items in the selected project.
+
+The synthetic trigger payload supplies `resource.id`, which both actions read.
+Both action mocks use the same sample work item id and show the title/description
+change with an increased revision. Personal identity profiles are omitted from
+the mocked responses. Keep both mocks enabled for draft testing; disable them
+only when intentionally testing against a configured project. A live run
+overwrites the new work item's title and description with the configured values.
