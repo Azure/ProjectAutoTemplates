@@ -128,6 +128,9 @@ actions still require a configured model connection.
 | Template | Configuration before a live run |
 | --- | --- |
 | [Get a Pull Request (Azure DevOps)](get-a-pull-request-azure-devops/manifest.json) | Bind the Azure DevOps Repos connection and set `Get_pull_request`'s project, repository ID, and pull request ID. Keep its synthetic mock enabled for draft testing; disable the mock only to retrieve a real pull request. The HTTP request starts the workflow; inspect the action output for the pull request details (there is no HTTP Response action). |
+| [Azure DevOps PR Review Lifecycle](azure-dev-ops-pr-review-lifecycle/manifest.json) | Bind the Repos connection and set the project and repository in every connector action, including `Cleanup_created_PR`'s nested `Abandon_PR`. Set distinct existing source/target branch refs in `Create_PR` with changes available to review. Set the same reviewer identity in `Add_reviewer`'s body, `Set_vote`, `Reject_PR`, and `Remove_reviewer`; voting requires a connection authorized to act as that reviewer. Live runs create a PR, change approval/rejection votes, create and resolve a thread, remove the reviewer, and attempt to abandon the created PR even if an intermediate step fails. |
+| [Azure DevOps Push and Commit Insights](azure-dev-ops-push-and-commit-insights/manifest.json) | Bind the Repos connection and set the project and repository in every applicable action. Select an existing push ID in `Get_push_commits`, a commit in `Get_commit_changes` and `Report_status`, base/target commits in `Get_diffs`, and an existing path and commit version in `List_items`. The push must contain a commit and the selected path must return at least one item to pass the embedded validation steps. A live run writes a commit status through `Report_status`. |
+| [Azure DevOps PR Discussion Automation](azure-dev-ops-pr-discussion-automation/manifest.json) | Bind the Repos connection and set the project and repository in every connector action, including `Cleanup_created_PR`'s nested `Abandon_PR`. Set distinct existing source/target branch refs in `Create_PR` with changes available to review. Live runs create a PR and discussion, add/edit a reply, add/remove a like, delete the reply, and attempt to abandon the created PR even if an intermediate step fails. Use a connection authorized for these operations. |
 | [Azure Key Vault secret rotation](automate-azure-key-vault-secret-rotation/manifest.json) | Set the Key Vault connection and `Update_Secret` vault hostname to the same vault, authorize the workflow's managed identity to update secrets, and select the Teams approval team/channel. Approved updates create a new secret value and expiration; coordinate the change with downstream consumers. |
 | [Excel feedback summary](excel-feedback-ai-teams-email/manifest.json) | Select the feedback workbook/table, Teams team/channel, and email recipient. |
 | [Gmail attachments to Google Drive](gmail-email-attachments-google-drive/manifest.json) | Select the Gmail label and destination Google Drive folder. |
@@ -142,6 +145,16 @@ actions still require a configured model connection.
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
 Keep redacted mock values as `"***"`; never replace them with real credentials.
+
+The three Azure DevOps lifecycle, push-insights, and discussion templates require
+no HTTP request body; resource selections are configured in the actions, not in
+the trigger sample. Keep **all** connector mocks enabled for draft testing. Use a
+dedicated test repository for live runs, configure every action first, and
+disable mocks consistently, including nested cleanup actions. Mixing real writes
+with mocked creation or cleanup can leave test artifacts behind or target a
+synthetic resource ID. Cleanup abandons a created PR; it does not delete the PR,
+its discussion history, or any source branches. Check Monitoring and clean up any
+remaining test artifacts if an action or cleanup fails.
 
 ## GitHub issue to Azure DevOps Boards setup
 
