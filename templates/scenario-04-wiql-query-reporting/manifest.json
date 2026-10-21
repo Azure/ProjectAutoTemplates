@@ -1,0 +1,249 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "scenario-04-wiql-query-reporting",
+    "name": "Run a saved Azure DevOps Boards WIQL query every hour",
+    "description": "Every hour, list saved queries in the configured Azure DevOps Boards project, retrieve a selected query, and run it to return matching work item references. Configure the Boards connection, project, team, and saved query before publishing.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Boards",
+      "WIQL",
+      "Reporting",
+      "Saved queries"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-boards"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Hour",
+            "interval": 1
+          }
+        }
+      },
+      "actions": {
+        "List_saved_queries": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "queries-list",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "$depth": 2
+            }
+          },
+          "runAfter": {}
+        },
+        "Get_a_saved_query": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "queries-get",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "query": "",
+              "$depth": 2,
+              "$includeDeleted": true,
+              "$useIsoDateFormat": true
+            }
+          },
+          "runAfter": {
+            "List_saved_queries": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Run_a_saved_WIQL_query": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "wiql-query-by-id",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "team": "",
+              "id": "",
+              "timePrecision": true
+            }
+          },
+          "runAfter": {
+            "Get_a_saved_query": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "Recurrence",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": null
+    }
+  },
+  "mocks": {
+    "List_saved_queries": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 2,
+          "value": [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "name": "Shared Queries",
+              "path": "Shared Queries",
+              "isFolder": true,
+              "hasChildren": false,
+              "isPublic": true,
+              "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/queries/00000000-0000-0000-0000-000000000001"
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "name": "My Queries",
+              "path": "My Queries",
+              "isFolder": true,
+              "hasChildren": true,
+              "isPublic": false,
+              "children": [
+                {
+                  "id": "00000000-0000-0000-0000-000000000003",
+                  "name": "Example work item report",
+                  "path": "My Queries/Example work item report",
+                  "isFolder": false,
+                  "queryType": "flat",
+                  "isPublic": false,
+                  "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/queries/00000000-0000-0000-0000-000000000003"
+                }
+              ],
+              "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/queries/00000000-0000-0000-0000-000000000002"
+            }
+          ]
+        }
+      }
+    },
+    "Get_a_saved_query": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000003",
+          "name": "Example work item report",
+          "path": "My Queries/Example work item report",
+          "createdDate": "2026-10-02T00:30:16.633Z",
+          "lastModifiedDate": "2026-10-02T00:30:16.633Z",
+          "queryType": "flat",
+          "isPublic": false,
+          "lastExecutedDate": "2026-10-02T10:39:36.643Z",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/queries/00000000-0000-0000-0000-000000000003"
+            },
+            "html": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_queries/query/00000000-0000-0000-0000-000000000003"
+            },
+            "parent": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/queries/00000000-0000-0000-0000-000000000002"
+            },
+            "wiql": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/wiql/00000000-0000-0000-0000-000000000003"
+            }
+          },
+          "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/queries/00000000-0000-0000-0000-000000000003"
+        }
+      }
+    },
+    "Run_a_saved_WIQL_query": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "queryType": "flat",
+          "queryResultType": "workItem",
+          "asOf": "2026-10-21T17:25:16.533Z",
+          "columns": [
+            {
+              "referenceName": "System.Id",
+              "name": "ID",
+              "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.Id"
+            },
+            {
+              "referenceName": "System.WorkItemType",
+              "name": "Work Item Type",
+              "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.WorkItemType"
+            },
+            {
+              "referenceName": "System.Title",
+              "name": "Title",
+              "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.Title"
+            },
+            {
+              "referenceName": "System.AssignedTo",
+              "name": "Assigned To",
+              "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.AssignedTo"
+            },
+            {
+              "referenceName": "System.State",
+              "name": "State",
+              "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.State"
+            },
+            {
+              "referenceName": "System.Tags",
+              "name": "Tags",
+              "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.Tags"
+            }
+          ],
+          "workItems": [
+            {
+              "id": 1,
+              "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/1"
+            },
+            {
+              "id": 2,
+              "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/2"
+            },
+            {
+              "id": 3,
+              "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/3"
+            },
+            {
+              "id": 4,
+              "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/4"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    }
+  }
+}

@@ -10,6 +10,7 @@ Use this reference when adding or updating a template. Start with the
 - [Template configuration](#template-configuration)
 - [GitHub issue to Azure DevOps Boards setup](#github-issue-to-azure-devops-boards-setup)
 - [Azure DevOps Boards work item event automation setup](#azure-devops-boards-work-item-event-automation-setup)
+- [Azure DevOps Boards WIQL query reporting setup](#azure-devops-boards-wiql-query-reporting-setup)
 
 ## Directory and publish index
 
@@ -143,6 +144,7 @@ actions still require a configured model connection.
 | [Google Sheets feedback summary](sheets-feedback-ai-gmail/manifest.json) | Replace the Google Sheet file id, select the feedback worksheet, and set the Gmail recipient. |
 | [Excel invoice reminders with Outlook.com](weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
 | [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields as described below. |
+| [Azure DevOps Boards WIQL query reporting](scenario-04-wiql-query-reporting/manifest.json) | Bind the shared Boards connection, select the same project for all three actions, configure the saved query in both Get and Run, select the query's team context, and review the hourly schedule. |
 
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
@@ -197,3 +199,41 @@ change with an increased revision. Personal identity profiles are omitted from
 the mocked responses. Keep both mocks enabled for draft testing; disable them
 only when intentionally testing against a configured project. A live run
 overwrites the new work item's title and description with the configured values.
+
+## Azure DevOps Boards WIQL query reporting setup
+
+The [`scenario-04-wiql-query-reporting` template](scenario-04-wiql-query-reporting/manifest.json)
+runs hourly, lists saved queries, retrieves a selected saved query, and executes
+it to return matching work item references. It does not create or update work
+items, fetch their full field values, or send a report to another service. Inspect
+the query results in the run outputs.
+
+Before publishing:
+
+1. Bind `ado-boards_#workflowname#` to the intended Azure DevOps organization.
+   All three actions share this connection to keep connection API ids unique.
+2. Select the same project for **List saved queries**, **Get a saved query**, and
+   **Run a saved WIQL query**.
+3. Choose an existing saved query accessible to the connection identity. Set
+   **Get a saved query**'s `query` and **Run a saved WIQL query**'s `id` to that
+   same query. The List action is informational; it does not automatically select
+   a query or supply its id to later actions. For a first test, use a flat-list
+   query matching the sample result shape.
+4. Select the Run action's **Team** for queries that depend on team context.
+   Use a connection identity authorized to read the project, saved query, and
+   matching work items. Private queries must be accessible to that identity.
+5. Review the **Recurrence** trigger before enabling the workflow. The exported
+   schedule runs once per hour.
+
+The live project, team, and query selectors are empty, and the export's
+resource-specific query-picker metadata is omitted. Mock query ids, paths, URLs,
+and work item references are synthetic; identity profiles are omitted. The
+Recurrence sample body is intentionally `null` because no action reads it.
+
+Import the manifest through **Import from json**, keep all three action mocks
+enabled, and run **Test Draft**. Expect List, Get, and Run to succeed in that
+order. The mock List response includes the same query as Get, and the mock Run
+response includes six column definitions and four work item references. For a
+live test, configure the connection and selectors, disable all three mocks, and
+verify the returned work item ids match the selected saved query in Boards.
+Disable the workflow afterward if ongoing hourly execution is not wanted.
