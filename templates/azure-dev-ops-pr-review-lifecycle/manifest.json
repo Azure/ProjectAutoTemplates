@@ -1,0 +1,1440 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "azure-dev-ops-pr-review-lifecycle",
+    "name": "Azure DevOps PR Review Lifecycle",
+    "description": "Create a pull request, assign a reviewer, verify approval and rejection votes, and create and resolve a review discussion. Remove the reviewer and abandon the test PR to clean up.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Repos",
+      "Pull requests"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-repos",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {},
+          "description": "No request body is required. Keep connector mocks enabled for draft testing. Before a live run, bind the Azure DevOps Repos connection and configure all resource selections in the actions."
+        }
+      },
+      "actions": {
+        "Create_PR": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-requests-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "body/sourceRefName": "",
+              "body/targetRefName": "",
+              "body/title": "[example] S1 review & approval",
+              "body/description": "Automated fixture PR for ADO Repos scenario 1.",
+              "supportsIterations": true
+            }
+          }
+        },
+        "Get_PR": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-requests-get",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "includeCommits": true,
+              "includeWorkItemRefs": true
+            }
+          },
+          "runAfter": {
+            "Create_PR": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_reviewer": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-reviewers-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "body": [
+                {
+                  "id": ""
+                }
+              ]
+            }
+          },
+          "runAfter": {
+            "Get_PR": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_reviewers": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-reviewers-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']"
+            }
+          },
+          "runAfter": {
+            "Add_reviewer": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Set_vote": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-reviewers-add",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "reviewerId": "",
+              "body/vote": 10
+            }
+          },
+          "runAfter": {
+            "List_reviewers": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Validate_approved_vote": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@body('Set_vote')",
+            "schema": {
+              "type": "object",
+              "required": [
+                "vote"
+              ],
+              "properties": {
+                "vote": {
+                  "type": "integer",
+                  "enum": [
+                    10
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Set_vote": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Reject_PR": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-reviewers-add",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "reviewerId": "",
+              "body/vote": -10
+            }
+          },
+          "runAfter": {
+            "Validate_approved_vote": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Validate_rejected_vote": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@body('Reject_PR')",
+            "schema": {
+              "type": "object",
+              "required": [
+                "vote"
+              ],
+              "properties": {
+                "vote": {
+                  "type": "integer",
+                  "enum": [
+                    -10
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Reject_PR": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Create_thread": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-threads-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "body/comments": [
+                {
+                  "parentCommentId": 0,
+                  "content": "example: automated review thread",
+                  "commentType": "text"
+                }
+              ],
+              "body/status": "active"
+            }
+          },
+          "runAfter": {
+            "Validate_rejected_vote": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_threads": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-threads-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']"
+            }
+          },
+          "runAfter": {
+            "Create_thread": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_thread": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-threads-get",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']"
+            }
+          },
+          "runAfter": {
+            "List_threads": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Resolve_thread": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-threads-update",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "body/status": "closed"
+            }
+          },
+          "runAfter": {
+            "Get_thread": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Remove_reviewer": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-reviewers-delete",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "reviewerId": ""
+            }
+          },
+          "runAfter": {
+            "Resolve_thread": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Cleanup_created_PR": {
+          "type": "If",
+          "runAfter": {
+            "Create_PR": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Get_PR": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Add_reviewer": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_reviewers": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Set_vote": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Validate_approved_vote": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Reject_PR": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Validate_rejected_vote": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Create_thread": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_threads": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Get_thread": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Resolve_thread": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Remove_reviewer": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          },
+          "expression": "@equals(actions('Create_PR')?['status'], 'Succeeded')",
+          "actions": {
+            "Abandon_PR": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "serviceProviderId": "/serviceProviders/ado-repos",
+                  "operationId": "pull-requests-update",
+                  "connectionName": "ado-repos_#workflowname#"
+                },
+                "parameters": {
+                  "project": "",
+                  "repositoryId": "",
+                  "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+                  "body/status": "abandoned"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        },
+        "Report_result": {
+          "type": "If",
+          "runAfter": {
+            "Cleanup_created_PR": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@and(equals(actions('Create_PR')?['status'], 'Succeeded'), equals(actions('Get_PR')?['status'], 'Succeeded'), equals(actions('Add_reviewer')?['status'], 'Succeeded'), equals(actions('List_reviewers')?['status'], 'Succeeded'), equals(actions('Set_vote')?['status'], 'Succeeded'), equals(actions('Validate_approved_vote')?['status'], 'Succeeded'), equals(actions('Reject_PR')?['status'], 'Succeeded'), equals(actions('Validate_rejected_vote')?['status'], 'Succeeded'), equals(actions('Create_thread')?['status'], 'Succeeded'), equals(actions('List_threads')?['status'], 'Succeeded'), equals(actions('Get_thread')?['status'], 'Succeeded'), equals(actions('Resolve_thread')?['status'], 'Succeeded'), equals(actions('Remove_reviewer')?['status'], 'Succeeded'))",
+          "actions": {
+            "Result": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "scenario": "AzureDevOpsPRReviewLifecycle",
+                  "result": "Succeeded"
+                }
+              },
+              "kind": "Http"
+            }
+          },
+          "else": {
+            "actions": {
+              "Scenario_failed": {
+                "type": "Terminate",
+                "inputs": {
+                  "runStatus": "Failed",
+                  "runError": {
+                    "code": "ScenarioFailed",
+                    "message": "A scenario step failed. Inspect its error in Monitoring; PR cleanup was attempted when creation succeeded."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "Create_PR": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "Created",
+        "body": {
+          "repository": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "example-review-repo",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+            "project": {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "organization",
+              "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+            },
+            "size": 1831,
+            "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "isDisabled": false,
+            "isInMaintenance": false
+          },
+          "pullRequestId": 37,
+          "codeReviewId": 37,
+          "status": "active",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+            "descriptor": "example-identity"
+          },
+          "creationDate": "2026-10-20T05:31:18.8873358Z",
+          "title": "[example] S1 review & approval",
+          "description": "Automated fixture PR for ADO Repos scenario 1.",
+          "sourceRefName": "refs/heads/example-feature/s1",
+          "targetRefName": "refs/heads/main",
+          "mergeStatus": "queued",
+          "isDraft": false,
+          "mergeId": "00000000-0000-4000-8000-000000000005",
+          "lastMergeSourceCommit": {
+            "commitId": "0000000000000000000000000000000000000001",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+          },
+          "lastMergeTargetCommit": {
+            "commitId": "0000000000000000000000000000000000000002",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+          },
+          "reviewers": [],
+          "labels": [],
+          "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "workItems": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/workitems"
+            },
+            "sourceBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/example-feature/s1"
+            },
+            "targetBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/main"
+            },
+            "statuses": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/statuses"
+            },
+            "sourceCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+            },
+            "targetCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+            },
+            "createdBy": {
+              "href": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003"
+            },
+            "iterations": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/iterations"
+            }
+          },
+          "supportsIterations": true,
+          "artifactId": "vstfs:///Git/PullRequestId/00000000-0000-4000-8000-000000000001%2f00000000-0000-4000-8000-000000000002%2f37"
+        }
+      }
+    },
+    "Get_PR": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "repository": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "example-review-repo",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+            "project": {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "organization",
+              "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+            },
+            "size": 1831,
+            "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "isDisabled": false,
+            "isInMaintenance": false
+          },
+          "pullRequestId": 37,
+          "codeReviewId": 37,
+          "status": "active",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+            "descriptor": "example-identity"
+          },
+          "creationDate": "2026-10-20T05:31:18.8873358Z",
+          "title": "[example] S1 review & approval",
+          "description": "Automated fixture PR for ADO Repos scenario 1.",
+          "sourceRefName": "refs/heads/example-feature/s1",
+          "targetRefName": "refs/heads/main",
+          "mergeStatus": "queued",
+          "isDraft": false,
+          "mergeId": "00000000-0000-4000-8000-000000000005",
+          "lastMergeSourceCommit": {
+            "commitId": "0000000000000000000000000000000000000001",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+          },
+          "lastMergeTargetCommit": {
+            "commitId": "0000000000000000000000000000000000000002",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+          },
+          "reviewers": [],
+          "commits": [
+            {
+              "commitId": "0000000000000000000000000000000000000001",
+              "author": {
+                "name": "Example Developer",
+                "email": "developer@example.com",
+                "date": "2026-10-20T05:17:53Z"
+              },
+              "committer": {
+                "name": "Example Developer",
+                "email": "developer@example.com",
+                "date": "2026-10-20T05:17:53Z"
+              },
+              "comment": "Example scenario 1 commit",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+            }
+          ],
+          "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "workItems": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/workitems"
+            },
+            "sourceBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/example-feature/s1"
+            },
+            "targetBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/main"
+            },
+            "statuses": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/statuses"
+            },
+            "sourceCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+            },
+            "targetCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+            },
+            "createdBy": {
+              "href": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003"
+            },
+            "iterations": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/iterations"
+            }
+          },
+          "supportsIterations": true,
+          "artifactId": "vstfs:///Git/PullRequestId/00000000-0000-4000-8000-000000000001%2f00000000-0000-4000-8000-000000000002%2f37"
+        }
+      }
+    },
+    "Add_reviewer": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "reviewerUrl": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/reviewers/00000000-0000-4000-8000-000000000003",
+              "vote": 0,
+              "hasDeclined": false,
+              "isFlagged": false,
+              "displayName": "Example Developer",
+              "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+              "_links": {
+                "avatar": {
+                  "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                }
+              },
+              "id": "00000000-0000-4000-8000-000000000003",
+              "uniqueName": "developer@example.com",
+              "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+            }
+          ]
+        }
+      }
+    },
+    "List_reviewers": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "reviewerUrl": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/reviewers/00000000-0000-4000-8000-000000000003",
+              "vote": 0,
+              "hasDeclined": false,
+              "isFlagged": false,
+              "displayName": "Example Developer",
+              "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+              "_links": {
+                "avatar": {
+                  "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                }
+              },
+              "id": "00000000-0000-4000-8000-000000000003",
+              "uniqueName": "developer@example.com",
+              "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+            }
+          ]
+        }
+      }
+    },
+    "Set_vote": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "reviewerUrl": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/reviewers/00000000-0000-4000-8000-000000000003",
+          "vote": 10,
+          "hasDeclined": false,
+          "isFlagged": false,
+          "displayName": "Example Developer",
+          "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+          "_links": {
+            "avatar": {
+              "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+            }
+          },
+          "id": "00000000-0000-4000-8000-000000000003",
+          "uniqueName": "developer@example.com",
+          "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+        }
+      }
+    },
+    "Reject_PR": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "reviewerUrl": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/reviewers/00000000-0000-4000-8000-000000000003",
+          "vote": -10,
+          "hasDeclined": false,
+          "isFlagged": false,
+          "displayName": "Example Developer",
+          "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+          "_links": {
+            "avatar": {
+              "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+            }
+          },
+          "id": "00000000-0000-4000-8000-000000000003",
+          "uniqueName": "developer@example.com",
+          "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+        }
+      }
+    },
+    "Create_thread": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "pullRequestThreadContext": null,
+          "id": 84,
+          "publishedDate": "2026-10-20T05:31:19.967Z",
+          "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+          "comments": [
+            {
+              "id": 1,
+              "parentCommentId": 0,
+              "author": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                "descriptor": "example-identity"
+              },
+              "content": "example: automated review thread",
+              "publishedDate": "2026-10-20T05:31:19.967Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "lastContentUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "commentType": "text",
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84/comments/1"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "threads": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+                },
+                "pullRequests": {
+                  "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                }
+              }
+            }
+          ],
+          "status": "active",
+          "threadContext": null,
+          "properties": null,
+          "identities": null,
+          "isDeleted": false,
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    "List_threads": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "pullRequestThreadContext": null,
+              "id": 81,
+              "publishedDate": "2026-10-20T05:31:19.273Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.273Z",
+              "comments": [
+                {
+                  "id": 1,
+                  "parentCommentId": 0,
+                  "author": {
+                    "displayName": "Microsoft.VisualStudio.Services.TFS",
+                    "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000006",
+                    "_links": {
+                      "avatar": {
+                        "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                      }
+                    },
+                    "id": "00000000-0000-4000-8000-000000000006",
+                    "uniqueName": "",
+                    "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                    "descriptor": "example-identity"
+                  },
+                  "content": "Example Developer joined as a reviewer",
+                  "publishedDate": "2026-10-20T05:31:19.273Z",
+                  "lastUpdatedDate": "2026-10-20T05:31:19.273Z",
+                  "lastContentUpdatedDate": "2026-10-20T05:31:19.273Z",
+                  "commentType": "system",
+                  "usersLiked": [],
+                  "_links": {
+                    "self": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/81/comments/1"
+                    },
+                    "repository": {
+                      "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                    },
+                    "threads": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/81"
+                    },
+                    "pullRequests": {
+                      "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                    }
+                  }
+                }
+              ],
+              "threadContext": null,
+              "properties": {
+                "CodeReviewReviewersUpdatedNumAdded": {
+                  "$type": "System.Int32",
+                  "$value": 1
+                },
+                "CodeReviewReviewersUpdatedNumChanged": {
+                  "$type": "System.Int32",
+                  "$value": 0
+                },
+                "CodeReviewReviewersUpdatedNumDeclined": {
+                  "$type": "System.Int32",
+                  "$value": 0
+                },
+                "CodeReviewReviewersUpdatedNumRemoved": {
+                  "$type": "System.Int32",
+                  "$value": 0
+                },
+                "CodeReviewThreadType": {
+                  "$type": "System.String",
+                  "$value": "ReviewersUpdate"
+                },
+                "CodeReviewReviewersUpdatedAddedIdentity": {
+                  "$type": "System.String",
+                  "$value": "1"
+                },
+                "CodeReviewReviewersUpdatedByIdentity": {
+                  "$type": "System.String",
+                  "$value": "1"
+                }
+              },
+              "identities": {
+                "1": {
+                  "displayName": "Example Developer",
+                  "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                  "_links": {
+                    "avatar": {
+                      "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                    }
+                  },
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "uniqueName": "developer@example.com",
+                  "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                  "descriptor": "example-identity"
+                }
+              },
+              "isDeleted": false,
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/81"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                }
+              }
+            },
+            {
+              "pullRequestThreadContext": null,
+              "id": 82,
+              "publishedDate": "2026-10-20T05:31:19.52Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.52Z",
+              "comments": [
+                {
+                  "id": 1,
+                  "parentCommentId": 0,
+                  "author": {
+                    "displayName": "Example Developer",
+                    "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                    "_links": {
+                      "avatar": {
+                        "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                      }
+                    },
+                    "id": "00000000-0000-4000-8000-000000000003",
+                    "uniqueName": "developer@example.com",
+                    "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                    "descriptor": "example-identity"
+                  },
+                  "content": "Example Developer voted 10",
+                  "publishedDate": "2026-10-20T05:31:19.52Z",
+                  "lastUpdatedDate": "2026-10-20T05:31:19.52Z",
+                  "lastContentUpdatedDate": "2026-10-20T05:31:19.52Z",
+                  "commentType": "system",
+                  "usersLiked": [],
+                  "_links": {
+                    "self": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/82/comments/1"
+                    },
+                    "repository": {
+                      "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                    },
+                    "threads": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/82"
+                    },
+                    "pullRequests": {
+                      "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                    }
+                  }
+                }
+              ],
+              "threadContext": null,
+              "properties": {
+                "CodeReviewThreadType": {
+                  "$type": "System.String",
+                  "$value": "VoteUpdate"
+                },
+                "CodeReviewVoteResult": {
+                  "$type": "System.String",
+                  "$value": "10"
+                },
+                "CodeReviewVotedByInitiatorIdentity": {
+                  "$type": "System.String",
+                  "$value": "1"
+                },
+                "CodeReviewVotedByIdentity": {
+                  "$type": "System.String",
+                  "$value": "1"
+                }
+              },
+              "identities": {
+                "1": {
+                  "displayName": "Example Developer",
+                  "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                  "_links": {
+                    "avatar": {
+                      "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                    }
+                  },
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "uniqueName": "developer@example.com",
+                  "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                  "descriptor": "example-identity"
+                }
+              },
+              "isDeleted": false,
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/82"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                }
+              }
+            },
+            {
+              "pullRequestThreadContext": null,
+              "id": 83,
+              "publishedDate": "2026-10-20T05:31:19.77Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.77Z",
+              "comments": [
+                {
+                  "id": 1,
+                  "parentCommentId": 0,
+                  "author": {
+                    "displayName": "Example Developer",
+                    "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                    "_links": {
+                      "avatar": {
+                        "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                      }
+                    },
+                    "id": "00000000-0000-4000-8000-000000000003",
+                    "uniqueName": "developer@example.com",
+                    "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                    "descriptor": "example-identity"
+                  },
+                  "content": "Example Developer voted -10",
+                  "publishedDate": "2026-10-20T05:31:19.77Z",
+                  "lastUpdatedDate": "2026-10-20T05:31:19.77Z",
+                  "lastContentUpdatedDate": "2026-10-20T05:31:19.77Z",
+                  "commentType": "system",
+                  "usersLiked": [],
+                  "_links": {
+                    "self": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/83/comments/1"
+                    },
+                    "repository": {
+                      "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                    },
+                    "threads": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/83"
+                    },
+                    "pullRequests": {
+                      "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                    }
+                  }
+                }
+              ],
+              "threadContext": null,
+              "properties": {
+                "CodeReviewThreadType": {
+                  "$type": "System.String",
+                  "$value": "VoteUpdate"
+                },
+                "CodeReviewVoteResult": {
+                  "$type": "System.String",
+                  "$value": "-10"
+                },
+                "CodeReviewVotedByInitiatorIdentity": {
+                  "$type": "System.String",
+                  "$value": "1"
+                },
+                "CodeReviewVotedByIdentity": {
+                  "$type": "System.String",
+                  "$value": "1"
+                }
+              },
+              "identities": {
+                "1": {
+                  "displayName": "Example Developer",
+                  "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                  "_links": {
+                    "avatar": {
+                      "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                    }
+                  },
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "uniqueName": "developer@example.com",
+                  "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                  "descriptor": "example-identity"
+                }
+              },
+              "isDeleted": false,
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/83"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                }
+              }
+            },
+            {
+              "pullRequestThreadContext": null,
+              "id": 84,
+              "publishedDate": "2026-10-20T05:31:19.967Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "comments": [
+                {
+                  "id": 1,
+                  "parentCommentId": 0,
+                  "author": {
+                    "displayName": "Example Developer",
+                    "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                    "_links": {
+                      "avatar": {
+                        "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                      }
+                    },
+                    "id": "00000000-0000-4000-8000-000000000003",
+                    "uniqueName": "developer@example.com",
+                    "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                    "descriptor": "example-identity"
+                  },
+                  "content": "example: automated review thread",
+                  "publishedDate": "2026-10-20T05:31:19.967Z",
+                  "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+                  "lastContentUpdatedDate": "2026-10-20T05:31:19.967Z",
+                  "commentType": "text",
+                  "usersLiked": [],
+                  "_links": {
+                    "self": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84/comments/1"
+                    },
+                    "repository": {
+                      "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                    },
+                    "threads": {
+                      "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+                    },
+                    "pullRequests": {
+                      "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                    }
+                  }
+                }
+              ],
+              "status": "active",
+              "threadContext": null,
+              "properties": null,
+              "identities": null,
+              "isDeleted": false,
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                }
+              }
+            }
+          ],
+          "count": 4
+        }
+      }
+    },
+    "Get_thread": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "pullRequestThreadContext": null,
+          "id": 84,
+          "publishedDate": "2026-10-20T05:31:19.967Z",
+          "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+          "comments": [
+            {
+              "id": 1,
+              "parentCommentId": 0,
+              "author": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                "descriptor": "example-identity"
+              },
+              "content": "example: automated review thread",
+              "publishedDate": "2026-10-20T05:31:19.967Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "lastContentUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "commentType": "text",
+              "usersLiked": [],
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84/comments/1"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "threads": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+                },
+                "pullRequests": {
+                  "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                }
+              }
+            }
+          ],
+          "status": "active",
+          "threadContext": null,
+          "properties": null,
+          "identities": null,
+          "isDeleted": false,
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    "Resolve_thread": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "pullRequestThreadContext": null,
+          "id": 84,
+          "publishedDate": "2026-10-20T05:31:19.967Z",
+          "lastUpdatedDate": "2026-10-20T05:31:20.407Z",
+          "comments": [
+            {
+              "id": 1,
+              "parentCommentId": 0,
+              "author": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                "descriptor": "example-identity"
+              },
+              "content": "example: automated review thread",
+              "publishedDate": "2026-10-20T05:31:19.967Z",
+              "lastUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "lastContentUpdatedDate": "2026-10-20T05:31:19.967Z",
+              "commentType": "text",
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84/comments/1"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "threads": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+                },
+                "pullRequests": {
+                  "href": "https://dev.azure.com/example/_apis/git/pullRequests/37"
+                }
+              }
+            }
+          ],
+          "status": "closed",
+          "threadContext": null,
+          "properties": null,
+          "identities": null,
+          "isDeleted": false,
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/threads/84"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    "Remove_reviewer": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": null
+      }
+    },
+    "Abandon_PR": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "repository": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "example-review-repo",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+            "project": {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "organization",
+              "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+            },
+            "size": 1831,
+            "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "isDisabled": false,
+            "isInMaintenance": false
+          },
+          "pullRequestId": 37,
+          "codeReviewId": 37,
+          "status": "abandoned",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+            "descriptor": "example-identity"
+          },
+          "creationDate": "2026-10-20T05:31:18.8873358Z",
+          "closedDate": "2026-10-20T05:31:20.7052788Z",
+          "title": "[example] S1 review & approval",
+          "description": "Automated fixture PR for ADO Repos scenario 1.",
+          "sourceRefName": "refs/heads/example-feature/s1",
+          "targetRefName": "refs/heads/main",
+          "isDraft": false,
+          "mergeId": "00000000-0000-4000-8000-000000000005",
+          "lastMergeSourceCommit": {
+            "commitId": "0000000000000000000000000000000000000001",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+          },
+          "lastMergeTargetCommit": {
+            "commitId": "0000000000000000000000000000000000000002",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+          },
+          "reviewers": [],
+          "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "workItems": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/workitems"
+            },
+            "sourceBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/example-feature/s1"
+            },
+            "targetBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/main"
+            },
+            "statuses": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/statuses"
+            },
+            "sourceCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+            },
+            "targetCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+            },
+            "createdBy": {
+              "href": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003"
+            },
+            "iterations": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/37/iterations"
+            }
+          },
+          "supportsIterations": true,
+          "artifactId": "vstfs:///Git/PullRequestId/00000000-0000-4000-8000-000000000001%2f00000000-0000-4000-8000-000000000002%2f37"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-repos_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-repos"
+    }
+  }
+}

@@ -1,0 +1,1345 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "azure-dev-ops-push-and-commit-insights",
+    "name": "Azure DevOps Push and Commit Insights",
+    "description": "Inspect repository pushes, commits, changed files, and diffs, then publish a commit status.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Repos",
+      "Commits"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-repos",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {},
+          "description": "No request body is required. Keep connector mocks enabled for draft testing. Before a live run, bind the Azure DevOps Repos connection and configure all resource selections in the actions."
+        }
+      },
+      "actions": {
+        "List_repositories": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "repositories-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": ""
+            }
+          },
+          "runAfter": {}
+        },
+        "List_PRs": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-requests-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "$top": 5,
+              "searchCriteria.status": "active"
+            }
+          },
+          "runAfter": {
+            "List_repositories": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_pushes": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pushes-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "$top": 5
+            }
+          },
+          "runAfter": {
+            "List_PRs": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_push_commits": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pushes-get-commits",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pushId": "",
+              "top": 10
+            }
+          },
+          "runAfter": {
+            "List_pushes": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Validate_Get_push_commits": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@body('Get_push_commits')",
+            "schema": {
+              "type": "object",
+              "required": [
+                "count",
+                "value"
+              ],
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "value": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Get_push_commits": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_commit_changes": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "commits-get-changes",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "commitId": "",
+              "top": 50
+            }
+          },
+          "runAfter": {
+            "Validate_Get_push_commits": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_diffs": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "diffs-get",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "baseVersion": "",
+              "baseVersionType": "commit",
+              "targetVersion": "",
+              "targetVersionType": "commit",
+              "diffCommonCommit": true,
+              "$top": 50
+            }
+          },
+          "runAfter": {
+            "Get_commit_changes": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_items": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "items-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "scopePath": "",
+              "recursionLevel": "full",
+              "versionDescriptor.version": "",
+              "versionDescriptor.versionType": "commit"
+            }
+          },
+          "runAfter": {
+            "Get_diffs": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Validate_List_items": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@body('List_items')",
+            "schema": {
+              "type": "object",
+              "required": [
+                "count",
+                "value"
+              ],
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "value": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "List_items": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Repo_stats": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "stats-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": ""
+            }
+          },
+          "runAfter": {
+            "Validate_List_items": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Report_status": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "statuses-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "commitId": "",
+              "body/state": "succeeded",
+              "body/description": "example push validation passed",
+              "body/context": {
+                "genre": "example",
+                "name": "push-validate"
+              }
+            }
+          },
+          "runAfter": {
+            "Repo_stats": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Report_result": {
+          "type": "If",
+          "runAfter": {
+            "List_repositories": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_PRs": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_pushes": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Get_push_commits": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Validate_Get_push_commits": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Get_commit_changes": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Get_diffs": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_items": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Validate_List_items": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Repo_stats": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Report_status": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          },
+          "expression": "@and(equals(actions('List_repositories')?['status'], 'Succeeded'), equals(actions('List_PRs')?['status'], 'Succeeded'), equals(actions('List_pushes')?['status'], 'Succeeded'), equals(actions('Get_push_commits')?['status'], 'Succeeded'), equals(actions('Validate_Get_push_commits')?['status'], 'Succeeded'), equals(actions('Get_commit_changes')?['status'], 'Succeeded'), equals(actions('Get_diffs')?['status'], 'Succeeded'), equals(actions('List_items')?['status'], 'Succeeded'), equals(actions('Validate_List_items')?['status'], 'Succeeded'), equals(actions('Repo_stats')?['status'], 'Succeeded'), equals(actions('Report_status')?['status'], 'Succeeded'))",
+          "actions": {
+            "Result": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "scenario": "AzureDevOpsPushAndCommitInsights",
+                  "result": "Succeeded"
+                }
+              },
+              "runAfter": {},
+              "kind": "Http"
+            }
+          },
+          "else": {
+            "actions": {
+              "Scenario_failed": {
+                "type": "Terminate",
+                "inputs": {
+                  "runStatus": "Failed",
+                  "runError": {
+                    "code": "ScenarioFailed",
+                    "message": "A scenario step failed. Inspect its error in Monitoring."
+                  }
+                },
+                "runAfter": {}
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0",
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Connection": "close",
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "List_repositories": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "id": "00000000-0000-4000-8000-000000000007",
+              "name": "example-repo",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000007",
+              "project": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "ExampleProject",
+                "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                "state": "wellFormed",
+                "revision": 11,
+                "visibility": "organization",
+                "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+              },
+              "defaultBranch": "refs/heads/main",
+              "size": 1907,
+              "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-repo",
+              "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-repo",
+              "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-repo",
+              "isDisabled": false,
+              "isInMaintenance": false,
+              "creationDate": "2026-10-14T21:25:04.903Z"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "name": "example-review-repo",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+              "project": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "ExampleProject",
+                "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                "state": "wellFormed",
+                "revision": 11,
+                "visibility": "organization",
+                "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+              },
+              "defaultBranch": "refs/heads/main",
+              "size": 1831,
+              "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+              "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+              "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+              "isDisabled": false,
+              "isInMaintenance": false,
+              "creationDate": "2026-10-15T03:30:09.657Z"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000008",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000008",
+              "project": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "ExampleProject",
+                "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                "state": "wellFormed",
+                "revision": 11,
+                "visibility": "organization",
+                "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+              },
+              "size": 0,
+              "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/ExampleProject",
+              "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/ExampleProject",
+              "webUrl": "https://dev.azure.com/example/ExampleProject/_git/ExampleProject",
+              "isDisabled": false,
+              "isInMaintenance": false,
+              "creationDate": "2026-09-17T10:53:12.21Z"
+            }
+          ],
+          "count": 3
+        }
+      }
+    },
+    "List_PRs": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "state": "unchanged",
+                  "visibility": "unchanged",
+                  "lastUpdateTime": "0001-01-01T00:00:00"
+                }
+              },
+              "pullRequestId": 7,
+              "codeReviewId": 7,
+              "status": "active",
+              "createdBy": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+                "descriptor": "example-identity"
+              },
+              "creationDate": "2026-10-15T04:03:34.8306375Z",
+              "title": "Example pull request",
+              "description": "Opened by the Azure DevOps Repos connector scenario.",
+              "sourceRefName": "refs/heads/example-feature",
+              "targetRefName": "refs/heads/main",
+              "mergeStatus": "succeeded",
+              "isDraft": false,
+              "mergeId": "00000000-0000-4000-8000-000000000009",
+              "lastMergeSourceCommit": {
+                "commitId": "0000000000000000000000000000000000000004",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000004"
+              },
+              "lastMergeTargetCommit": {
+                "commitId": "0000000000000000000000000000000000000005",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000005"
+              },
+              "lastMergeCommit": {
+                "commitId": "0000000000000000000000000000000000000006",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000006"
+              },
+              "reviewers": [],
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/7",
+              "supportsIterations": true
+            },
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "state": "unchanged",
+                  "visibility": "unchanged",
+                  "lastUpdateTime": "0001-01-01T00:00:00"
+                }
+              },
+              "pullRequestId": 6,
+              "codeReviewId": 6,
+              "status": "active",
+              "createdBy": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+                "descriptor": "example-identity"
+              },
+              "creationDate": "2026-10-15T04:03:31.3146564Z",
+              "title": "Example pull request",
+              "description": "Opened by the Azure DevOps Repos connector scenario.",
+              "sourceRefName": "refs/heads/example-feature",
+              "targetRefName": "refs/heads/main",
+              "mergeStatus": "succeeded",
+              "isDraft": false,
+              "mergeId": "00000000-0000-4000-8000-000000000010",
+              "lastMergeSourceCommit": {
+                "commitId": "0000000000000000000000000000000000000007",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000007"
+              },
+              "lastMergeTargetCommit": {
+                "commitId": "0000000000000000000000000000000000000008",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000008"
+              },
+              "lastMergeCommit": {
+                "commitId": "0000000000000000000000000000000000000009",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000009"
+              },
+              "reviewers": [
+                {
+                  "reviewerUrl": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/6/reviewers/00000000-0000-4000-8000-000000000003",
+                  "vote": 0,
+                  "hasDeclined": false,
+                  "isFlagged": false,
+                  "displayName": "Example Developer",
+                  "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                  "_links": {
+                    "avatar": {
+                      "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                    }
+                  },
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "uniqueName": "developer@example.com",
+                  "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+                }
+              ],
+              "labels": [],
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/6",
+              "supportsIterations": true
+            },
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "state": "unchanged",
+                  "visibility": "unchanged",
+                  "lastUpdateTime": "0001-01-01T00:00:00"
+                }
+              },
+              "pullRequestId": 5,
+              "codeReviewId": 5,
+              "status": "active",
+              "createdBy": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+                "descriptor": "example-identity"
+              },
+              "creationDate": "2026-10-15T04:03:27.4545447Z",
+              "title": "Example pull request",
+              "description": "Opened by the Azure DevOps Repos connector scenario.",
+              "sourceRefName": "refs/heads/example-feature",
+              "targetRefName": "refs/heads/main",
+              "mergeStatus": "succeeded",
+              "isDraft": false,
+              "mergeId": "00000000-0000-4000-8000-000000000011",
+              "lastMergeSourceCommit": {
+                "commitId": "000000000000000000000000000000000000000a",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/000000000000000000000000000000000000000a"
+              },
+              "lastMergeTargetCommit": {
+                "commitId": "0000000000000000000000000000000000000002",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+              },
+              "lastMergeCommit": {
+                "commitId": "000000000000000000000000000000000000000b",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/000000000000000000000000000000000000000b"
+              },
+              "reviewers": [
+                {
+                  "reviewerUrl": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/5/reviewers/00000000-0000-4000-8000-000000000003",
+                  "vote": 0,
+                  "hasDeclined": false,
+                  "isFlagged": false,
+                  "displayName": "Example Developer",
+                  "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                  "_links": {
+                    "avatar": {
+                      "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                    }
+                  },
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "uniqueName": "developer@example.com",
+                  "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+                }
+              ],
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/5",
+              "supportsIterations": true
+            }
+          ],
+          "count": 3
+        }
+      }
+    },
+    "List_pushes": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 5,
+          "value": [
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                  "state": "wellFormed",
+                  "revision": 11,
+                  "visibility": "organization",
+                  "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+                },
+                "size": 1831,
+                "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+                "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "isDisabled": false,
+                "isInMaintenance": false
+              },
+              "pushedBy": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+                "descriptor": "example-identity"
+              },
+              "pushId": 75,
+              "date": "2026-10-20T05:20:43.0421188Z",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pushes/75"
+            },
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                  "state": "wellFormed",
+                  "revision": 11,
+                  "visibility": "organization",
+                  "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+                },
+                "size": 1831,
+                "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+                "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "isDisabled": false,
+                "isInMaintenance": false
+              },
+              "pushedBy": {
+                "displayName": "Microsoft.VisualStudio.Services.TFS",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000006",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000006",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000006",
+                "descriptor": "example-identity"
+              },
+              "pushId": 74,
+              "date": "2026-10-20T05:20:42.3709603Z",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pushes/74"
+            },
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                  "state": "wellFormed",
+                  "revision": 11,
+                  "visibility": "organization",
+                  "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+                },
+                "size": 1831,
+                "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+                "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "isDisabled": false,
+                "isInMaintenance": false
+              },
+              "pushedBy": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+                "descriptor": "example-identity"
+              },
+              "pushId": 73,
+              "date": "2026-10-20T05:20:31.4794878Z",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pushes/73"
+            },
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                  "state": "wellFormed",
+                  "revision": 11,
+                  "visibility": "organization",
+                  "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+                },
+                "size": 1831,
+                "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+                "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "isDisabled": false,
+                "isInMaintenance": false
+              },
+              "pushedBy": {
+                "displayName": "Microsoft.VisualStudio.Services.TFS",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000006",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000006",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000006",
+                "descriptor": "example-identity"
+              },
+              "pushId": 72,
+              "date": "2026-10-20T05:20:30.075851Z",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pushes/72"
+            },
+            {
+              "repository": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "example-review-repo",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+                "project": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "name": "ExampleProject",
+                  "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+                  "state": "wellFormed",
+                  "revision": 11,
+                  "visibility": "organization",
+                  "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+                },
+                "size": 1831,
+                "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+                "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+                "isDisabled": false,
+                "isInMaintenance": false
+              },
+              "pushedBy": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+                "descriptor": "example-identity"
+              },
+              "pushId": 71,
+              "date": "2026-10-20T05:17:57.0821577Z",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pushes/71"
+            }
+          ]
+        }
+      }
+    },
+    "Get_push_commits": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "commitId": "0000000000000000000000000000000000000003",
+              "author": {
+                "name": "Example Developer",
+                "email": "developer@example.com",
+                "date": "2026-10-20T05:17:54Z"
+              },
+              "committer": {
+                "name": "Example Developer",
+                "email": "developer@example.com",
+                "date": "2026-10-20T05:17:54Z"
+              },
+              "comment": "Example scenario 3 commit",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000003",
+              "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo/commit/0000000000000000000000000000000000000003",
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000003"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "web": {
+                  "href": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo/commit/0000000000000000000000000000000000000003"
+                },
+                "changes": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000003/changes"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Get_commit_changes": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "changeCounts": {
+            "Add": 3
+          },
+          "changes": [
+            {
+              "item": {
+                "objectId": "000000000000000000000000000000000000000c",
+                "gitObjectType": "tree",
+                "commitId": "0000000000000000000000000000000000000003",
+                "path": "/example-feature",
+                "isFolder": true,
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items/example-feature?versionType=Commit&version=0000000000000000000000000000000000000003"
+              },
+              "changeType": "add"
+            },
+            {
+              "item": {
+                "objectId": "000000000000000000000000000000000000000d",
+                "gitObjectType": "tree",
+                "commitId": "0000000000000000000000000000000000000003",
+                "path": "/example-feature",
+                "isFolder": true,
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items/example-feature%2F20261020T051753Z?versionType=Commit&version=0000000000000000000000000000000000000003"
+              },
+              "changeType": "add"
+            },
+            {
+              "item": {
+                "objectId": "000000000000000000000000000000000000000e",
+                "gitObjectType": "blob",
+                "commitId": "0000000000000000000000000000000000000003",
+                "path": "/example-feature/scenario-3.txt",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items/example-feature%2F20261020T051753Z%2Fscenario-3.txt?versionType=Commit&version=0000000000000000000000000000000000000003"
+              },
+              "changeType": "add"
+            }
+          ]
+        }
+      }
+    },
+    "Get_diffs": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "allChangesIncluded": true,
+          "changeCounts": {
+            "Add": 3
+          },
+          "changes": [
+            {
+              "item": {
+                "objectId": "000000000000000000000000000000000000000c",
+                "gitObjectType": "tree",
+                "commitId": "0000000000000000000000000000000000000003",
+                "path": "/example-feature",
+                "isFolder": true,
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items/example-feature?versionType=Commit&version=0000000000000000000000000000000000000003"
+              },
+              "changeType": "add"
+            },
+            {
+              "item": {
+                "objectId": "000000000000000000000000000000000000000d",
+                "gitObjectType": "tree",
+                "commitId": "0000000000000000000000000000000000000003",
+                "path": "/example-feature",
+                "isFolder": true,
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items/example-feature%2F20261020T051753Z?versionType=Commit&version=0000000000000000000000000000000000000003"
+              },
+              "changeType": "add"
+            },
+            {
+              "item": {
+                "objectId": "000000000000000000000000000000000000000e",
+                "gitObjectType": "blob",
+                "commitId": "0000000000000000000000000000000000000003",
+                "path": "/example-feature/scenario-3.txt",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items/example-feature%2F20261020T051753Z%2Fscenario-3.txt?versionType=Commit&version=0000000000000000000000000000000000000003"
+              },
+              "changeType": "add"
+            }
+          ],
+          "commonCommit": "0000000000000000000000000000000000000002",
+          "baseCommit": "0000000000000000000000000000000000000002",
+          "targetCommit": "0000000000000000000000000000000000000003",
+          "aheadCount": 1,
+          "behindCount": 0
+        }
+      }
+    },
+    "List_items": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "objectId": "000000000000000000000000000000000000000e",
+              "gitObjectType": "blob",
+              "commitId": "0000000000000000000000000000000000000003",
+              "path": "/example-feature/scenario-3.txt",
+              "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/items?path=%2Fexample-feature%2F20261020T051753Z%2Fscenario-3.txt&versionType=Commit&version=0000000000000000000000000000000000000003&versionOptions=None"
+            }
+          ]
+        }
+      }
+    },
+    "Repo_stats": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 12,
+          "value": [
+            {
+              "commit": {
+                "treeId": "000000000000000000000000000000000000000f",
+                "commitId": "0000000000000000000000000000000000000002",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:26Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:26Z"
+                },
+                "comment": "Initialize the example repository.",
+                "parents": [],
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+              },
+              "name": "main",
+              "aheadCount": 0,
+              "behindCount": 0,
+              "isBaseVersion": true
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000008",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:30Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:30Z"
+                },
+                "comment": "Initialize the example repository.",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000008"
+              },
+              "name": "main",
+              "aheadCount": 1,
+              "behindCount": 1,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000005",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:33Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:33Z"
+                },
+                "comment": "Initialize the example repository.",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000005"
+              },
+              "name": "main",
+              "aheadCount": 1,
+              "behindCount": 1,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "000000000000000000000000000000000000000a",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:27Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:27Z"
+                },
+                "comment": "Update the example file.",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/000000000000000000000000000000000000000a"
+              },
+              "name": "example-feature",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000007",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:30Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:30Z"
+                },
+                "comment": "Update the example file.",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000007"
+              },
+              "name": "example-feature",
+              "aheadCount": 2,
+              "behindCount": 1,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000004",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:34Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-15T04:03:34Z"
+                },
+                "comment": "Update the example file.",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000004"
+              },
+              "name": "example-feature",
+              "aheadCount": 2,
+              "behindCount": 1,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000001",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:53Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:53Z"
+                },
+                "comment": "Example scenario 1 commit",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000001"
+              },
+              "name": "example-feature/s1",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000010",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:54Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:54Z"
+                },
+                "comment": "Example scenario 2 commit",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000010"
+              },
+              "name": "example-feature/s2",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000003",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:54Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:54Z"
+                },
+                "comment": "Example scenario 3 commit",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000003"
+              },
+              "name": "example-feature/s3",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000011",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:55Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:55Z"
+                },
+                "comment": "Example scenario 4 commit",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000011"
+              },
+              "name": "example-feature/s4",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000012",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:55Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:55Z"
+                },
+                "comment": "Example scenario 5 commit",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000012"
+              },
+              "name": "example-feature/s5",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            },
+            {
+              "commit": {
+                "commitId": "0000000000000000000000000000000000000013",
+                "author": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:56Z"
+                },
+                "committer": {
+                  "name": "Example Developer",
+                  "email": "developer@example.com",
+                  "date": "2026-10-20T05:17:56Z"
+                },
+                "comment": "Example scenario 6 commit",
+                "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000013"
+              },
+              "name": "example-feature/s6",
+              "aheadCount": 1,
+              "behindCount": 0,
+              "isBaseVersion": false
+            }
+          ]
+        }
+      }
+    },
+    "Report_status": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "Created",
+        "body": {
+          "id": 1254728,
+          "state": "succeeded",
+          "description": "example push validation passed",
+          "context": {
+            "name": "push-validate",
+            "genre": "example"
+          },
+          "creationDate": "2026-10-20T05:20:47.273Z",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+            "descriptor": "example-identity"
+          }
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-repos_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-repos"
+    }
+  }
+}
