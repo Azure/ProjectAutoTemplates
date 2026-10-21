@@ -1,0 +1,219 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "scenario-05-sprint-iteration-planning",
+    "name": "Review Azure DevOps Boards sprint and backlog work items every hour",
+    "description": "Every hour, list a team's iterations, retrieve work item references for a selected iteration, and list work item references at a configured backlog level. Configure the Boards connection, project, team, iteration, and backlog level before publishing.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Boards",
+      "Sprints",
+      "Iterations",
+      "Backlog",
+      "Planning"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-boards"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Hour",
+            "interval": 1
+          }
+        }
+      },
+      "actions": {
+        "List_iterations": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "iterations-list",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "team": ""
+            }
+          },
+          "runAfter": {}
+        },
+        "List_iteration_work_items": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "iterations-get-iteration-work-items",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "team": "",
+              "iterationId": ""
+            }
+          },
+          "runAfter": {
+            "List_iterations": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_backlog_level_work_items": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "backlogs-get-backlog-level-work-items",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "team": "",
+              "backlogId": "Microsoft.TaskCategory"
+            }
+          },
+          "runAfter": {
+            "List_iteration_work_items": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "Recurrence",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": null
+    }
+  },
+  "mocks": {
+    "List_iterations": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 2,
+          "value": [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "name": "Sprint 1",
+              "path": "ExampleProject\\Sprint 1",
+              "attributes": {
+                "startDate": "2026-10-15T00:00:00Z",
+                "finishDate": "2026-10-30T00:00:00Z",
+                "timeFrame": "current"
+              },
+              "url": "https://dev.azure.com/example-org/ExampleProject/ExampleTeam/_apis/work/teamsettings/iterations/00000000-0000-0000-0000-000000000001"
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "name": "Sprint 2",
+              "path": "ExampleProject\\Sprint 2",
+              "attributes": {
+                "startDate": "2026-12-16T00:00:00Z",
+                "finishDate": "2027-01-02T00:00:00Z",
+                "timeFrame": "future"
+              },
+              "url": "https://dev.azure.com/example-org/ExampleProject/ExampleTeam/_apis/work/teamsettings/iterations/00000000-0000-0000-0000-000000000002"
+            }
+          ]
+        }
+      }
+    },
+    "List_iteration_work_items": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "workItemRelations": [
+            {
+              "rel": null,
+              "source": null,
+              "target": {
+                "id": 2,
+                "url": "https://dev.azure.com/example-org/_apis/wit/workItems/2"
+              }
+            }
+          ],
+          "url": "https://dev.azure.com/example-org/ExampleProject/ExampleTeam/_apis/work/teamsettings/iterations/00000000-0000-0000-0000-000000000002/workitems",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/ExampleTeam/_apis/work/teamsettings/iterations/00000000-0000-0000-0000-000000000002/workitems"
+            },
+            "project": {
+              "href": "https://dev.azure.com/example-org/_apis/projects/ExampleProject"
+            },
+            "team": {
+              "href": "https://dev.azure.com/example-org/_apis/projects/ExampleProject/teams/ExampleTeam"
+            },
+            "teamIteration": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/ExampleTeam/_apis/work/teamsettings/iterations/00000000-0000-0000-0000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    "List_backlog_level_work_items": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "workItems": [
+            {
+              "rel": null,
+              "source": null,
+              "target": {
+                "id": 1
+              }
+            },
+            {
+              "rel": null,
+              "source": null,
+              "target": {
+                "id": 2
+              }
+            },
+            {
+              "rel": null,
+              "source": null,
+              "target": {
+                "id": 3
+              }
+            },
+            {
+              "rel": null,
+              "source": null,
+              "target": {
+                "id": 4
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    }
+  }
+}

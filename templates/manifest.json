@@ -24,5 +24,6 @@
   "summarize-azure-devops-work-item-agent",
   "http-queue-ado-pipeline",
   "scenario-01-work-item-event-automation",
-  "scenario-04-wiql-query-reporting"
+  "scenario-04-wiql-query-reporting",
+  "scenario-05-sprint-iteration-planning"
 ]

@@ -11,6 +11,7 @@ Use this reference when adding or updating a template. Start with the
 - [GitHub issue to Azure DevOps Boards setup](#github-issue-to-azure-devops-boards-setup)
 - [Azure DevOps Boards work item event automation setup](#azure-devops-boards-work-item-event-automation-setup)
 - [Azure DevOps Boards WIQL query reporting setup](#azure-devops-boards-wiql-query-reporting-setup)
+- [Azure DevOps Boards sprint and iteration planning setup](#azure-devops-boards-sprint-and-iteration-planning-setup)
 
 ## Directory and publish index
 
@@ -145,6 +146,7 @@ actions still require a configured model connection.
 | [Excel invoice reminders with Outlook.com](weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
 | [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields as described below. |
 | [Azure DevOps Boards WIQL query reporting](scenario-04-wiql-query-reporting/manifest.json) | Bind the shared Boards connection, select the same project for all three actions, configure the saved query in both Get and Run, select the query's team context, and review the hourly schedule. |
+| [Azure DevOps Boards sprint and iteration planning](scenario-05-sprint-iteration-planning/manifest.json) | Bind the shared Boards connection, select the same project/team for all three actions, choose an iteration and supported backlog level, and review the hourly schedule. |
 
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
@@ -237,3 +239,42 @@ response includes six column definitions and four work item references. For a
 live test, configure the connection and selectors, disable all three mocks, and
 verify the returned work item ids match the selected saved query in Boards.
 Disable the workflow afterward if ongoing hourly execution is not wanted.
+
+## Azure DevOps Boards sprint and iteration planning setup
+
+The [`scenario-05-sprint-iteration-planning` template](scenario-05-sprint-iteration-planning/manifest.json)
+runs hourly to list a team's iterations, retrieve work item references for a
+configured iteration, and list work item references at a configured backlog
+level. It does not create sprints, move work items between iterations, fetch full
+work item fields, or modify the backlog. Inspect the results in the run outputs.
+
+Before publishing:
+
+1. Bind `ado-boards_#workflowname#` to the intended Azure DevOps organization.
+   All three actions share this connection.
+2. Select the same **Project** and **Team** in all three actions. The connection
+   identity must be able to read the team's iterations, backlog, and work items.
+3. Set **List iteration work items**'s `iterationId` to an iteration configured
+   for that team. The preceding List action does not automatically select an
+   iteration or feed its id into this action. Configure the desired iteration
+   explicitly; it will not roll forward to a new sprint automatically.
+4. Review **List backlog level work items**'s `backlogId`. The export defaults to
+   `Microsoft.TaskCategory`; select a backlog level supported by the destination
+   team's process and configuration.
+5. Review the **Recurrence** trigger before enabling the workflow. The exported
+   schedule runs once per hour.
+
+Live project, team, and iteration selectors are empty. Mock iteration ids,
+project/team paths, URLs, and work item references are synthetic. The sample
+sprint dates and `timeFrame` values are fixed examples rather than dynamically
+calculated values. No action reads the Recurrence sample body, so it remains
+`null`.
+
+Import the manifest through **Import from json**, keep all three action mocks
+enabled, and run **Test Draft**. Expect the actions to succeed in order: two
+iterations, one iteration work item relation, and four backlog work item
+references. The mocked iteration work item response links to the second sample
+iteration, and its target work item also appears in the mocked backlog. For a
+live read-only test, configure the connection and selectors, disable all three
+mocks, and compare the iteration and backlog results with Boards. Disable the
+workflow afterward if ongoing hourly execution is not wanted.
