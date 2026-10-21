@@ -4,7 +4,7 @@
   "metadata": {
     "id": "scenario-01-work-item-event-automation",
     "name": "Update an Azure DevOps Boards work item when it is created",
-    "description": "When a work item is created in the configured Azure DevOps Boards project, retrieve it and update its title and description. Configure both Boards connections, the project, and the update fields before publishing.",
+    "description": "When a work item is created in the configured Azure DevOps Boards project, retrieve it and update its title and description. Configure the Boards connection, the project, and the update fields before publishing.",
     "category": [
       "engineering",
       "data"
@@ -46,7 +46,7 @@
             "serviceProviderConfiguration": {
               "serviceProviderId": "/serviceProviders/ado-boards",
               "operationId": "work-items-get-work-item",
-              "connectionName": "ado-boards2_#workflowname#"
+              "connectionName": "ado-boards_#workflowname#"
             },
             "parameters": {
               "id": "${triggerBody()['resource']['id']}",
@@ -189,10 +189,6 @@
   },
   "connections": {
     "ado-boards_#workflowname#": {
-      "connectorType": "inapp",
-      "apiId": "/serviceProviders/ado-boards"
-    },
-    "ado-boards2_#workflowname#": {
       "connectorType": "inapp",
       "apiId": "/serviceProviders/ado-boards"
     }

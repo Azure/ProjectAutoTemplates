@@ -58,6 +58,10 @@ must be both declared and referenced by a connector or agent model. All names ar
 case-sensitive. Mentioning a connection in arbitrary text or sample data does not
 count as referencing it.
 
+Connection declarations must have unique `apiId` values to satisfy the portal's
+connection requirements. When multiple steps use the same connector, reuse one
+declared connection name across those steps rather than declaring the API twice.
+
 ### Workflow schema and validation limits
 
 The embedded `workflow.definition` is governed by the official Azure Logic Apps
@@ -138,7 +142,7 @@ actions still require a configured model connection.
 | [Outlook.com attachments to OneDrive](outlook-email-attachments-onedrive/manifest.json) | Select the Outlook.com mail folder and destination personal OneDrive folder. |
 | [Google Sheets feedback summary](sheets-feedback-ai-gmail/manifest.json) | Replace the Google Sheet file id, select the feedback worksheet, and set the Gmail recipient. |
 | [Excel invoice reminders with Outlook.com](weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
-| [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind both Boards connections to the same organization, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields as described below. |
+| [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields as described below. |
 
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
@@ -166,15 +170,16 @@ intentionally testing real writes to a configured project.
 
 The [`scenario-01-work-item-event-automation` template](scenario-01-work-item-event-automation/manifest.json)
 retrieves a newly created work item and then updates its title and description.
-The export's connector operations, expressions, action ordering, and two
-connection references are retained. Live project, area path, team, and assignee
-values are empty so imports do not subscribe to or modify the author's resources.
+The export's connector operations, expressions, and action ordering are retained.
+The trigger and both actions share one Boards connection so the portal's
+connection requirements contain only one entry for the Boards API. Live project,
+area path, team, and assignee values are empty so imports do not subscribe to or
+modify the author's resources.
 
 Before publishing:
 
-1. Bind both Boards connections to the same Azure DevOps organization.
-   `ado-boards_#workflowname#` is used by the trigger and update action;
-   `ado-boards2_#workflowname#` is used by the get action.
+1. Bind `ado-boards_#workflowname#` to the intended Azure DevOps organization.
+   This connection is used by the trigger, get action, and update action.
 2. Select the same project in the trigger's **Project** (`projectId`) and both
    actions' **Project** fields. Select the trigger's **Area Path** if needed and
    the update action's **Team**.
