@@ -1,0 +1,849 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "azure-dev-ops-pr-discussion-automation",
+    "name": "Azure DevOps PR Discussion Automation",
+    "description": "Create a PR discussion, add and edit replies, and manage comment likes. Delete the test reply and abandon the PR afterward.",
+    "category": [
+      "engineering",
+      "communication"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Repos",
+      "Pull requests"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-repos",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {},
+          "description": "No request body is required. Keep connector mocks enabled for draft testing. Before a live run, bind the Azure DevOps Repos connection and configure all resource selections in the actions."
+        }
+      },
+      "actions": {
+        "Create_PR": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-requests-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "body/sourceRefName": "",
+              "body/targetRefName": "",
+              "body/title": "[example] S5 bot commenting",
+              "body/description": "Automated fixture PR for ADO Repos scenario 5.",
+              "supportsIterations": true
+            }
+          },
+          "runAfter": {}
+        },
+        "Create_thread": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-threads-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "body/comments": [
+                {
+                  "parentCommentId": 0,
+                  "content": "example: bot thread root",
+                  "commentType": "text"
+                }
+              ],
+              "body/status": "active"
+            }
+          },
+          "runAfter": {
+            "Create_PR": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_comment": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-thread-comments-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "body/content": "example: bot reply",
+              "body/parentCommentId": "@first(body('Create_thread')?['comments'])?['id']",
+              "body/commentType": "text"
+            }
+          },
+          "runAfter": {
+            "Create_thread": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_comments": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-thread-comments-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']"
+            }
+          },
+          "runAfter": {
+            "Add_comment": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Update_comment": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-thread-comments-update",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "commentId": "@body('Add_comment')?['id']",
+              "body/content": "example: bot reply (edited)"
+            }
+          },
+          "runAfter": {
+            "List_comments": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Like_comment": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-comment-likes-create",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "commentId": "@body('Add_comment')?['id']"
+            }
+          },
+          "runAfter": {
+            "Update_comment": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_likes": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-comment-likes-list",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "commentId": "@body('Add_comment')?['id']"
+            }
+          },
+          "runAfter": {
+            "Like_comment": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Unlike_comment": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-comment-likes-delete",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "commentId": "@body('Add_comment')?['id']"
+            }
+          },
+          "runAfter": {
+            "List_likes": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Delete_comment": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "operationId": "pull-request-thread-comments-delete",
+              "connectionName": "ado-repos_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "repositoryId": "",
+              "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+              "threadId": "@body('Create_thread')?['id']",
+              "commentId": "@body('Add_comment')?['id']"
+            }
+          },
+          "runAfter": {
+            "Unlike_comment": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Cleanup_created_PR": {
+          "type": "If",
+          "runAfter": {
+            "Create_PR": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Create_thread": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Add_comment": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_comments": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Update_comment": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Like_comment": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "List_likes": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Unlike_comment": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ],
+            "Delete_comment": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          },
+          "expression": "@equals(actions('Create_PR')?['status'], 'Succeeded')",
+          "actions": {
+            "Abandon_PR": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "serviceProviderId": "/serviceProviders/ado-repos",
+                  "operationId": "pull-requests-update",
+                  "connectionName": "ado-repos_#workflowname#"
+                },
+                "parameters": {
+                  "project": "",
+                  "repositoryId": "",
+                  "pullRequestId": "@body('Create_PR')?['pullRequestId']",
+                  "body/status": "abandoned"
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        },
+        "Report_result": {
+          "type": "If",
+          "runAfter": {
+            "Cleanup_created_PR": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@and(equals(actions('Create_PR')?['status'], 'Succeeded'), equals(actions('Create_thread')?['status'], 'Succeeded'), equals(actions('Add_comment')?['status'], 'Succeeded'), equals(actions('List_comments')?['status'], 'Succeeded'), equals(actions('Update_comment')?['status'], 'Succeeded'), equals(actions('Like_comment')?['status'], 'Succeeded'), equals(actions('List_likes')?['status'], 'Succeeded'), equals(actions('Unlike_comment')?['status'], 'Succeeded'), equals(actions('Delete_comment')?['status'], 'Succeeded'))",
+          "actions": {
+            "Result": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "scenario": "AzureDevOpsPRDiscussionAutomation",
+                  "result": "Succeeded"
+                }
+              },
+              "runAfter": {},
+              "kind": "Http"
+            }
+          },
+          "else": {
+            "actions": {
+              "Scenario_failed": {
+                "type": "Terminate",
+                "inputs": {
+                  "runStatus": "Failed",
+                  "runError": {
+                    "code": "ScenarioFailed",
+                    "message": "A scenario step failed. Inspect its error in Monitoring; PR cleanup was attempted when creation succeeded."
+                  }
+                },
+                "runAfter": {}
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0",
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Connection": "close",
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {}
+    }
+  },
+  "mocks": {
+    "Create_PR": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "Created",
+        "body": {
+          "repository": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "example-review-repo",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+            "project": {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "organization",
+              "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+            },
+            "size": 1831,
+            "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "isDisabled": false,
+            "isInMaintenance": false
+          },
+          "pullRequestId": 35,
+          "codeReviewId": 35,
+          "status": "active",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+            "descriptor": "example-identity"
+          },
+          "creationDate": "2026-10-20T05:21:02.2195166Z",
+          "title": "[example] S5 bot commenting",
+          "description": "Automated fixture PR for ADO Repos scenario 5.",
+          "sourceRefName": "refs/heads/example-feature/s5",
+          "targetRefName": "refs/heads/main",
+          "mergeStatus": "queued",
+          "isDraft": false,
+          "mergeId": "00000000-0000-4000-8000-000000000012",
+          "lastMergeSourceCommit": {
+            "commitId": "0000000000000000000000000000000000000012",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000012"
+          },
+          "lastMergeTargetCommit": {
+            "commitId": "0000000000000000000000000000000000000002",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+          },
+          "reviewers": [],
+          "labels": [],
+          "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "workItems": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/workitems"
+            },
+            "sourceBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/example-feature/s5"
+            },
+            "targetBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/main"
+            },
+            "statuses": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/statuses"
+            },
+            "sourceCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000012"
+            },
+            "targetCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+            },
+            "createdBy": {
+              "href": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003"
+            },
+            "iterations": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/iterations"
+            }
+          },
+          "supportsIterations": true,
+          "artifactId": "vstfs:///Git/PullRequestId/00000000-0000-4000-8000-000000000001%2f00000000-0000-4000-8000-000000000002%2f35"
+        }
+      }
+    },
+    "Create_thread": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "pullRequestThreadContext": null,
+          "id": 77,
+          "publishedDate": "2026-10-20T05:21:02.42Z",
+          "lastUpdatedDate": "2026-10-20T05:21:02.42Z",
+          "comments": [
+            {
+              "id": 1,
+              "parentCommentId": 0,
+              "author": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                "descriptor": "example-identity"
+              },
+              "content": "example: bot thread root",
+              "publishedDate": "2026-10-20T05:21:02.42Z",
+              "lastUpdatedDate": "2026-10-20T05:21:02.42Z",
+              "lastContentUpdatedDate": "2026-10-20T05:21:02.42Z",
+              "commentType": "text",
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77/comments/1"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "threads": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77"
+                },
+                "pullRequests": {
+                  "href": "https://dev.azure.com/example/_apis/git/pullRequests/35"
+                }
+              }
+            }
+          ],
+          "status": "active",
+          "threadContext": null,
+          "properties": null,
+          "identities": null,
+          "isDeleted": false,
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            }
+          }
+        }
+      }
+    },
+    "Add_comment": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": 2,
+          "parentCommentId": 1,
+          "author": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+            "descriptor": "example-identity"
+          },
+          "content": "example: bot reply",
+          "publishedDate": "2026-10-20T05:21:02.567Z",
+          "lastUpdatedDate": "2026-10-20T05:21:02.567Z",
+          "lastContentUpdatedDate": "2026-10-20T05:21:02.567Z",
+          "commentType": "text",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77/comments/2"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "threads": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77"
+            },
+            "pullRequests": {
+              "href": "https://dev.azure.com/example/_apis/git/pullRequests/35"
+            }
+          }
+        }
+      }
+    },
+    "List_comments": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "id": 1,
+              "parentCommentId": 0,
+              "author": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                "descriptor": "example-identity"
+              },
+              "content": "example: bot thread root",
+              "publishedDate": "2026-10-20T05:21:02.42Z",
+              "lastUpdatedDate": "2026-10-20T05:21:02.42Z",
+              "lastContentUpdatedDate": "2026-10-20T05:21:02.42Z",
+              "commentType": "text",
+              "usersLiked": [],
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77/comments/1"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "threads": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77"
+                },
+                "pullRequests": {
+                  "href": "https://dev.azure.com/example/_apis/git/pullRequests/35"
+                }
+              }
+            },
+            {
+              "id": 2,
+              "parentCommentId": 1,
+              "author": {
+                "displayName": "Example Developer",
+                "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+                "_links": {
+                  "avatar": {
+                    "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+                  }
+                },
+                "id": "00000000-0000-4000-8000-000000000003",
+                "uniqueName": "developer@example.com",
+                "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+                "descriptor": "example-identity"
+              },
+              "content": "example: bot reply",
+              "publishedDate": "2026-10-20T05:21:02.567Z",
+              "lastUpdatedDate": "2026-10-20T05:21:02.567Z",
+              "lastContentUpdatedDate": "2026-10-20T05:21:02.567Z",
+              "commentType": "text",
+              "usersLiked": [],
+              "_links": {
+                "self": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77/comments/2"
+                },
+                "repository": {
+                  "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+                },
+                "threads": {
+                  "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77"
+                },
+                "pullRequests": {
+                  "href": "https://dev.azure.com/example/_apis/git/pullRequests/35"
+                }
+              }
+            }
+          ],
+          "count": 2
+        }
+      }
+    },
+    "Update_comment": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": 2,
+          "parentCommentId": 1,
+          "author": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity",
+            "descriptor": "example-identity"
+          },
+          "content": "example: bot reply (edited)",
+          "publishedDate": "2026-10-20T05:21:02.567Z",
+          "lastUpdatedDate": "2026-10-20T05:21:02.82Z",
+          "lastContentUpdatedDate": "2026-10-20T05:21:02.82Z",
+          "commentType": "text",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77/comments/2"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "threads": {
+              "href": "https://dev.azure.com/example/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/threads/77"
+            },
+            "pullRequests": {
+              "href": "https://dev.azure.com/example/_apis/git/pullRequests/35"
+            }
+          }
+        }
+      }
+    },
+    "Like_comment": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": null
+      }
+    },
+    "List_likes": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "displayName": "Example Developer",
+              "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+              "id": "00000000-0000-4000-8000-000000000003",
+              "uniqueName": "developer@example.com",
+              "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003"
+            }
+          ]
+        }
+      }
+    },
+    "Unlike_comment": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": null
+      }
+    },
+    "Delete_comment": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": null
+      }
+    },
+    "Abandon_PR": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "repository": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "example-review-repo",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002",
+            "project": {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "name": "ExampleProject",
+              "url": "https://dev.azure.com/example/_apis/projects/00000000-0000-4000-8000-000000000001",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "organization",
+              "lastUpdateTime": "2026-10-14T21:24:20.413Z"
+            },
+            "size": 1831,
+            "remoteUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "sshUrl": "git@ssh.dev.azure.com:v3/example/ExampleProject/example-review-repo",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-review-repo",
+            "isDisabled": false,
+            "isInMaintenance": false
+          },
+          "pullRequestId": 35,
+          "codeReviewId": 35,
+          "status": "abandoned",
+          "createdBy": {
+            "displayName": "Example Developer",
+            "url": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003",
+            "_links": {
+              "avatar": {
+                "href": "https://dev.azure.com/example/_apis/GraphProfile/MemberAvatars/example-identity"
+              }
+            },
+            "id": "00000000-0000-4000-8000-000000000003",
+            "uniqueName": "developer@example.com",
+            "imageUrl": "https://dev.azure.com/example/_api/_common/identityImage?id=00000000-0000-4000-8000-000000000003",
+            "descriptor": "example-identity"
+          },
+          "creationDate": "2026-10-20T05:21:02.2195166Z",
+          "closedDate": "2026-10-20T05:21:03.5278234Z",
+          "title": "[example] S5 bot commenting",
+          "description": "Automated fixture PR for ADO Repos scenario 5.",
+          "sourceRefName": "refs/heads/example-feature/s5",
+          "targetRefName": "refs/heads/main",
+          "isDraft": false,
+          "mergeId": "00000000-0000-4000-8000-000000000012",
+          "lastMergeSourceCommit": {
+            "commitId": "0000000000000000000000000000000000000012",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000012"
+          },
+          "lastMergeTargetCommit": {
+            "commitId": "0000000000000000000000000000000000000002",
+            "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+          },
+          "reviewers": [],
+          "url": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35",
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35"
+            },
+            "repository": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002"
+            },
+            "workItems": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/workitems"
+            },
+            "sourceBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/example-feature/s5"
+            },
+            "targetBranch": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/refs/heads/main"
+            },
+            "statuses": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/statuses"
+            },
+            "sourceCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000012"
+            },
+            "targetCommit": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/commits/0000000000000000000000000000000000000002"
+            },
+            "createdBy": {
+              "href": "https://dev.azure.com/example/_apis/Identities/00000000-0000-4000-8000-000000000003"
+            },
+            "iterations": {
+              "href": "https://dev.azure.com/example/00000000-0000-4000-8000-000000000001/_apis/git/repositories/00000000-0000-4000-8000-000000000002/pullRequests/35/iterations"
+            }
+          },
+          "supportsIterations": true,
+          "artifactId": "vstfs:///Git/PullRequestId/00000000-0000-4000-8000-000000000001%2f00000000-0000-4000-8000-000000000002%2f35"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-repos_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-repos"
+    }
+  }
+}

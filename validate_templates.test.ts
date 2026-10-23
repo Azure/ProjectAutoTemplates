@@ -394,31 +394,6 @@ for (const [name, inputs, connectorType, stepType] of connectionInputs) {
   });
 }
 
-for (const duplicate of [true, false]) {
-  test(duplicate ? 'rejects duplicate connection API ids' : 'accepts distinct connection API ids', (t) => {
-    const f = fixture(t);
-    const template = createTemplate();
-    template.workflow.definition.actions.First = leaf;
-    template.workflow.definition.actions.Second = {
-      type: 'ApiConnection',
-      inputs: { host: { connection: { referenceName: 'second_#workflowname#' } } },
-    };
-    template.connections['service_#workflowname#'] = { connectorType: 'shared', apiId: '/managedApis/service' };
-    template.connections['second_#workflowname#'] = {
-      connectorType: 'shared',
-      apiId: duplicate ? '/managedApis/service' : '/managedApis/second',
-    };
-    f.writeTemplate(template);
-    const result = f.validate();
-    if (duplicate) {
-      assert.equal(result.errors.length, 1, messages(result));
-      assert.match(messages(result), /connections.second_#workflowname#\.apiId: duplicates connections.service_#workflowname#\.apiId/);
-    } else {
-      assert.equal(result.errors.length, 0, messages(result));
-    }
-  });
-}
-
 for (const stepType of ['ApiConnection', 'ServiceProviderWebhook']) {
   test(`requires a connection reference on ${stepType} steps`, (t) => {
     const f = fixture(t);

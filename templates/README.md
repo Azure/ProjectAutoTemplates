@@ -9,9 +9,6 @@ Use this reference when adding or updating a template. Start with the
 - [Template categories](#template-categories)
 - [Template configuration](#template-configuration)
 - [GitHub issue to Azure DevOps Boards setup](#github-issue-to-azure-devops-boards-setup)
-- [Azure DevOps Boards work item event automation setup](#azure-devops-boards-work-item-event-automation-setup)
-- [Azure DevOps Boards WIQL query reporting setup](#azure-devops-boards-wiql-query-reporting-setup)
-- [Azure DevOps Boards sprint and iteration planning setup](#azure-devops-boards-sprint-and-iteration-planning-setup)
 
 ## Directory and publish index
 
@@ -59,10 +56,6 @@ The validator also checks relationships the envelope schema cannot express:
 must be both declared and referenced by a connector or agent model. All names are
 case-sensitive. Mentioning a connection in arbitrary text or sample data does not
 count as referencing it.
-
-Connection declarations must have unique `apiId` values to satisfy the portal's
-connection requirements. When multiple steps use the same connector, reuse one
-declared connection name across those steps rather than declaring the API twice.
 
 ### Workflow schema and validation limits
 
@@ -134,6 +127,10 @@ actions still require a configured model connection.
 
 | Template | Configuration before a live run |
 | --- | --- |
+| [Get a Pull Request (Azure DevOps)](get-a-pull-request-azure-devops/manifest.json) | Bind the Azure DevOps Repos connection and set `Get_pull_request`'s project, repository ID, and pull request ID. Keep its synthetic mock enabled for draft testing; disable the mock only to retrieve a real pull request. The HTTP request starts the workflow; inspect the action output for the pull request details (there is no HTTP Response action). |
+| [Azure DevOps PR Review Lifecycle](azure-dev-ops-pr-review-lifecycle/manifest.json) | Bind the Repos connection and set the project and repository in every connector action, including `Cleanup_created_PR`'s nested `Abandon_PR`. Set distinct existing source/target branch refs in `Create_PR` with changes available to review. Set the same reviewer identity in `Add_reviewer`'s body, `Set_vote`, `Reject_PR`, and `Remove_reviewer`; voting requires a connection authorized to act as that reviewer. Live runs create a PR, change approval/rejection votes, create and resolve a thread, remove the reviewer, and attempt to abandon the created PR even if an intermediate step fails. |
+| [Azure DevOps Push and Commit Insights](azure-dev-ops-push-and-commit-insights/manifest.json) | Bind the Repos connection and set the project and repository in every applicable action. Select an existing push ID in `Get_push_commits`, a commit in `Get_commit_changes` and `Report_status`, base/target commits in `Get_diffs`, and an existing path and commit version in `List_items`. The push must contain a commit and the selected path must return at least one item to pass the embedded validation steps. A live run writes a commit status through `Report_status`. |
+| [Azure DevOps PR Discussion Automation](azure-dev-ops-pr-discussion-automation/manifest.json) | Bind the Repos connection and set the project and repository in every connector action, including `Cleanup_created_PR`'s nested `Abandon_PR`. Set distinct existing source/target branch refs in `Create_PR` with changes available to review. Live runs create a PR and discussion, add/edit a reply, add/remove a like, delete the reply, and attempt to abandon the created PR even if an intermediate step fails. Use a connection authorized for these operations. |
 | [Azure Key Vault secret rotation](automate-azure-key-vault-secret-rotation/manifest.json) | Set the Key Vault connection and `Update_Secret` vault hostname to the same vault, authorize the workflow's managed identity to update secrets, and select the Teams approval team/channel. Approved updates create a new secret value and expiration; coordinate the change with downstream consumers. |
 | [Excel feedback summary](excel-feedback-ai-teams-email/manifest.json) | Select the feedback workbook/table, Teams team/channel, and email recipient. |
 | [Gmail attachments to Google Drive](gmail-email-attachments-google-drive/manifest.json) | Select the Gmail label and destination Google Drive folder. |
@@ -144,13 +141,23 @@ actions still require a configured model connection.
 | [Outlook.com attachments to OneDrive](outlook-email-attachments-onedrive/manifest.json) | Select the Outlook.com mail folder and destination personal OneDrive folder. |
 | [Google Sheets feedback summary](sheets-feedback-ai-gmail/manifest.json) | Replace the Google Sheet file id, select the feedback worksheet, and set the Gmail recipient. |
 | [Excel invoice reminders with Outlook.com](weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
-| [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields as described below. |
+| [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields. |
 | [Azure DevOps Boards WIQL query reporting](scenario-04-wiql-query-reporting/manifest.json) | Bind the shared Boards connection, select the same project for all three actions, configure the saved query in both Get and Run, select the query's team context, and review the hourly schedule. |
 | [Azure DevOps Boards sprint and iteration planning](scenario-05-sprint-iteration-planning/manifest.json) | Bind the shared Boards connection, select the same project/team for all three actions, choose an iteration and supported backlog level, and review the hourly schedule. |
 
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
 Keep redacted mock values as `"***"`; never replace them with real credentials.
+
+The three Azure DevOps lifecycle, push-insights, and discussion templates require
+no HTTP request body; resource selections are configured in the actions, not in
+the trigger sample. Keep **all** connector mocks enabled for draft testing. Use a
+dedicated test repository for live runs, configure every action first, and
+disable mocks consistently, including nested cleanup actions. Mixing real writes
+with mocked creation or cleanup can leave test artifacts behind or target a
+synthetic resource ID. Cleanup abandons a created PR; it does not delete the PR,
+its discussion history, or any source branches. Check Monitoring and clean up any
+remaining test artifacts if an action or cleanup fails.
 
 ## GitHub issue to Azure DevOps Boards setup
 
@@ -169,112 +176,3 @@ issue's `html_url`, so it follows the configured repository without editing an
 expression. The trigger payload and mocked Boards response are synthetic sample
 data. Keep the Boards action mock enabled for draft testing; disable it only when
 intentionally testing real writes to a configured project.
-
-## Azure DevOps Boards work item event automation setup
-
-The [`scenario-01-work-item-event-automation` template](scenario-01-work-item-event-automation/manifest.json)
-retrieves a newly created work item and then updates its title and description.
-The export's connector operations, expressions, and action ordering are retained.
-The trigger and both actions share one Boards connection so the portal's
-connection requirements contain only one entry for the Boards API. Live project,
-area path, team, and assignee values are empty so imports do not subscribe to or
-modify the author's resources.
-
-Before publishing:
-
-1. Bind `ado-boards_#workflowname#` to the intended Azure DevOps organization.
-   This connection is used by the trigger, get action, and update action.
-2. Select the same project in the trigger's **Project** (`projectId`) and both
-   actions' **Project** fields. Select the trigger's **Area Path** if needed and
-   the update action's **Team**.
-3. The update action defaults to **Task**. Use a work item type supported by the
-   project's process and create a work item of that type for the live test.
-   Review the sample title and description before enabling real updates. Configure
-   **State** and **Assigned To** as needed, or remove those optional fields from
-   the update rather than submitting empty values.
-4. Use connections authorized to create/remove work item event subscriptions,
-   read work items, and update work items in the selected project.
-
-The synthetic trigger payload supplies `resource.id`, which both actions read.
-Both action mocks use the same sample work item id and show the title/description
-change with an increased revision. Personal identity profiles are omitted from
-the mocked responses. Keep both mocks enabled for draft testing; disable them
-only when intentionally testing against a configured project. A live run
-overwrites the new work item's title and description with the configured values.
-
-## Azure DevOps Boards WIQL query reporting setup
-
-The [`scenario-04-wiql-query-reporting` template](scenario-04-wiql-query-reporting/manifest.json)
-runs hourly, lists saved queries, retrieves a selected saved query, and executes
-it to return matching work item references. It does not create or update work
-items, fetch their full field values, or send a report to another service. Inspect
-the query results in the run outputs.
-
-Before publishing:
-
-1. Bind `ado-boards_#workflowname#` to the intended Azure DevOps organization.
-   All three actions share this connection to keep connection API ids unique.
-2. Select the same project for **List saved queries**, **Get a saved query**, and
-   **Run a saved WIQL query**.
-3. Choose an existing saved query accessible to the connection identity. Set
-   **Get a saved query**'s `query` and **Run a saved WIQL query**'s `id` to that
-   same query. The List action is informational; it does not automatically select
-   a query or supply its id to later actions. For a first test, use a flat-list
-   query matching the sample result shape.
-4. Select the Run action's **Team** for queries that depend on team context.
-   Use a connection identity authorized to read the project, saved query, and
-   matching work items. Private queries must be accessible to that identity.
-5. Review the **Recurrence** trigger before enabling the workflow. The exported
-   schedule runs once per hour.
-
-The live project, team, and query selectors are empty, and the export's
-resource-specific query-picker metadata is omitted. Mock query ids, paths, URLs,
-and work item references are synthetic; identity profiles are omitted. The
-Recurrence sample body is intentionally `null` because no action reads it.
-
-Import the manifest through **Import from json**, keep all three action mocks
-enabled, and run **Test Draft**. Expect List, Get, and Run to succeed in that
-order. The mock List response includes the same query as Get, and the mock Run
-response includes six column definitions and four work item references. For a
-live test, configure the connection and selectors, disable all three mocks, and
-verify the returned work item ids match the selected saved query in Boards.
-Disable the workflow afterward if ongoing hourly execution is not wanted.
-
-## Azure DevOps Boards sprint and iteration planning setup
-
-The [`scenario-05-sprint-iteration-planning` template](scenario-05-sprint-iteration-planning/manifest.json)
-runs hourly to list a team's iterations, retrieve work item references for a
-configured iteration, and list work item references at a configured backlog
-level. It does not create sprints, move work items between iterations, fetch full
-work item fields, or modify the backlog. Inspect the results in the run outputs.
-
-Before publishing:
-
-1. Bind `ado-boards_#workflowname#` to the intended Azure DevOps organization.
-   All three actions share this connection.
-2. Select the same **Project** and **Team** in all three actions. The connection
-   identity must be able to read the team's iterations, backlog, and work items.
-3. Set **List iteration work items**'s `iterationId` to an iteration configured
-   for that team. The preceding List action does not automatically select an
-   iteration or feed its id into this action. Configure the desired iteration
-   explicitly; it will not roll forward to a new sprint automatically.
-4. Review **List backlog level work items**'s `backlogId`. The export defaults to
-   `Microsoft.TaskCategory`; select a backlog level supported by the destination
-   team's process and configuration.
-5. Review the **Recurrence** trigger before enabling the workflow. The exported
-   schedule runs once per hour.
-
-Live project, team, and iteration selectors are empty. Mock iteration ids,
-project/team paths, URLs, and work item references are synthetic. The sample
-sprint dates and `timeFrame` values are fixed examples rather than dynamically
-calculated values. No action reads the Recurrence sample body, so it remains
-`null`.
-
-Import the manifest through **Import from json**, keep all three action mocks
-enabled, and run **Test Draft**. Expect the actions to succeed in order: two
-iterations, one iteration work item relation, and four backlog work item
-references. The mocked iteration work item response links to the second sample
-iteration, and its target work item also appears in the mocked backlog. For a
-live read-only test, configure the connection and selectors, disable all three
-mocks, and compare the iteration and backlog results with Boards. Disable the
-workflow afterward if ongoing hourly execution is not wanted.

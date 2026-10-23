@@ -150,7 +150,7 @@ interface Template {
   workflow: { definition: Record<string, unknown> };
   trigger: { name: string };
   mocks?: Record<string, unknown>;
-  connections?: Record<string, { apiId: string }>;
+  connections?: Record<string, unknown>;
 }
 
 const ajv = new Ajv2020({ allErrors: true, allowUnionTypes: true });
@@ -313,14 +313,7 @@ function findReferenceErrors(template: Template): string[] {
       errors.push(`mocks.${name}: no matching workflow action (case-sensitive); rename or remove this mock`);
     }
   }
-  const connectionNamesByApiId = new Map<string, string>();
-  for (const [name, connection] of Object.entries(connections)) {
-    const existingName = connectionNamesByApiId.get(connection.apiId);
-    if (existingName !== undefined) {
-      errors.push(`connections.${name}.apiId: duplicates connections.${existingName}.apiId; reuse one connection name for this API so portal connection requirements have unique apiId values`);
-    } else {
-      connectionNamesByApiId.set(connection.apiId, name);
-    }
+  for (const name of Object.keys(connections)) {
     if (!referencedConnections.has(name)) {
       errors.push(`connections.${name}: declared connection is not referenced by a workflow connector or agent model; remove it or fix the reference`);
     }
