@@ -1,0 +1,196 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "scenario-01-work-item-event-automation",
+    "name": "Update an Azure DevOps Boards work item when it is created",
+    "description": "When a work item is created in the configured Azure DevOps Boards project, retrieve it and update its title and description. Configure the Boards connection, the project, and the update fields before publishing.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Boards",
+      "Work items"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-boards"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_a_work_item_is_created": {
+          "type": "ServiceProviderWebhook",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "on-work-item-created",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "projectId": "",
+              "areaPath": ""
+            }
+          }
+        }
+      },
+      "actions": {
+        "Get_a_work_item": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "work-items-get-work-item",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "id": "${triggerBody()['resource']['id']}",
+              "project": "",
+              "fields": "",
+              "asOf": "",
+              "$expand": "all"
+            }
+          }
+        },
+        "Update_a_work_item": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "operationId": "work-items-update",
+              "connectionName": "ado-boards_#workflowname#"
+            },
+            "parameters": {
+              "project": "",
+              "team": "",
+              "body/fields": {
+                "System": {
+                  "Title": "Updated title",
+                  "Description": "Updated description",
+                  "State": "",
+                  "AssignedTo": ""
+                }
+              },
+              "id": "${triggerBody()['resource']['id']}",
+              "type": "Task"
+            }
+          },
+          "runAfter": {
+            "Get_a_work_item": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_a_work_item_is_created",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": {
+        "eventType": "workitem.created",
+        "resource": {
+          "id": 1,
+          "rev": 1,
+          "fields": {
+            "System.AreaPath": "ExampleProject",
+            "System.TeamProject": "ExampleProject",
+            "System.IterationPath": "ExampleProject",
+            "System.WorkItemType": "Task",
+            "System.State": "To Do",
+            "System.Title": "Example task"
+          },
+          "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/1"
+        }
+      }
+    }
+  },
+  "mocks": {
+    "Get_a_work_item": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": 1,
+          "rev": 1,
+          "fields": {
+            "System.AreaPath": "ExampleProject",
+            "System.TeamProject": "ExampleProject",
+            "System.IterationPath": "ExampleProject",
+            "System.WorkItemType": "Task",
+            "System.State": "To Do",
+            "System.Reason": "Added to backlog",
+            "System.CreatedDate": "2026-10-02T00:04:03.983Z",
+            "System.ChangedDate": "2026-10-02T00:04:03.983Z",
+            "System.CommentCount": 0,
+            "System.Title": "Example task",
+            "Microsoft.VSTS.Common.Priority": 2,
+            "Microsoft.VSTS.Common.StateChangeDate": "2026-10-02T00:04:03.983Z"
+          },
+          "multilineFieldsFormat": {},
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/1"
+            },
+            "html": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_workitems/edit/1"
+            }
+          },
+          "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/1"
+        }
+      }
+    },
+    "Update_a_work_item": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": 1,
+          "rev": 2,
+          "fields": {
+            "System.AreaPath": "ExampleProject",
+            "System.TeamProject": "ExampleProject",
+            "System.IterationPath": "ExampleProject",
+            "System.WorkItemType": "Task",
+            "System.State": "To Do",
+            "System.Reason": "Added to backlog",
+            "System.CreatedDate": "2026-10-02T00:04:03.983Z",
+            "System.ChangedDate": "2026-10-02T00:04:16.010Z",
+            "System.CommentCount": 0,
+            "System.Title": "Updated title",
+            "Microsoft.VSTS.Common.Priority": 2,
+            "Microsoft.VSTS.Common.StateChangeDate": "2026-10-02T00:04:03.983Z",
+            "System.Description": "Updated description"
+          },
+          "multilineFieldsFormat": {
+            "System.Description": "html"
+          },
+          "_links": {
+            "self": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/1"
+            },
+            "html": {
+              "href": "https://dev.azure.com/example-org/ExampleProject/_workitems/edit/1"
+            }
+          },
+          "url": "https://dev.azure.com/example-org/ExampleProject/_apis/wit/workItems/1"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    }
+  }
+}

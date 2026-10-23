@@ -141,6 +141,9 @@ actions still require a configured model connection.
 | [Outlook.com attachments to OneDrive](outlook-email-attachments-onedrive/manifest.json) | Select the Outlook.com mail folder and destination personal OneDrive folder. |
 | [Google Sheets feedback summary](sheets-feedback-ai-gmail/manifest.json) | Replace the Google Sheet file id, select the feedback worksheet, and set the Gmail recipient. |
 | [Excel invoice reminders with Outlook.com](weekday-excel-invoice-reminders-outlook-com/manifest.json) | Update the workbook/table, column mappings, paid status, and time zone in `Settings`; align the recurrence time zone. |
+| [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields. |
+| [Azure DevOps Boards WIQL query reporting](scenario-04-wiql-query-reporting/manifest.json) | Bind the shared Boards connection, select the same project for all three actions, configure the saved query in both Get and Run, select the query's team context, and review the hourly schedule. |
+| [Azure DevOps Boards sprint and iteration planning](scenario-05-sprint-iteration-planning/manifest.json) | Bind the shared Boards connection, select the same project/team for all three actions, choose an iteration and supported backlog level, and review the hourly schedule. |
 
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
