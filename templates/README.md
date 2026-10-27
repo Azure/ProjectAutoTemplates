@@ -127,6 +127,10 @@ actions still require a configured model connection.
 
 | Template | Configuration before a live run |
 | --- | --- |
+| [PR Readiness Assistant](pr-readiness-assistant/manifest.json) | Bind the Repos connection and provide `project`, `repositoryId`, and a positive integer `pullRequestId` in the HTTP request body. Reads PR status, votes, discussions, and linked work items only. Clear review signals do not imply CI success, branch-policy compliance, merge permission, or authorization to merge. |
+| [Repeated Pipeline Failure Tracker](repeated-pipeline-failure-tracker/manifest.json) | Bind Pipelines and Boards connections and provide `project`, `team`, a positive integer `pipelineId`, `failureThreshold` (2-10), and `dryRun`. Start with `dryRun: true`. Checks the latest completed runs across all branches, ordered by run ID; successful or canceled completed runs break the failure streak. With `dryRun: false`, a threshold breach creates or updates a tagged Task and requires Task write permission. Run one instance at a time: lookup/create is not atomic. Keep the stable `OttoPipelineFailure-<pipelineId>` tag. Duplicate matches fail visibly; the workflow never changes Task state, closes recovered Tasks, queues pipelines, or monitors continuously. |
+| [Sprint Delivery Snapshot](sprint-delivery-snapshot/manifest.json) | Bind the Boards connection and provide `project` and `team` in the HTTP request body. The team must have a current iteration configured. Reads up to 100 items and their fields at the WIQL timestamp; an additional result produces a truncation warning. No work items or sprint settings are changed. |
+| [Stale PR Review Digest](stale-pr-review-digest/manifest.json) | Bind the Repos connection and provide `project`, `repositoryId`, and `staleAfterDays` (1-3650) in the HTTP request body. Lists up to 100 active PRs by creation age, not inactivity; reaching the cap produces an incompleteness warning. Does not post comments, send messages, or modify PRs. |
 | [Get a Pull Request (Azure DevOps)](get-a-pull-request-azure-devops/manifest.json) | Bind the Azure DevOps Repos connection and set `Get_pull_request`'s project, repository ID, and pull request ID. Keep its synthetic mock enabled for draft testing; disable the mock only to retrieve a real pull request. The HTTP request starts the workflow; inspect the action output for the pull request details (there is no HTTP Response action). |
 | [Azure DevOps PR Review Lifecycle](azure-dev-ops-pr-review-lifecycle/manifest.json) | Bind the Repos connection and set the project and repository in every connector action, including `Cleanup_created_PR`'s nested `Abandon_PR`. Set distinct existing source/target branch refs in `Create_PR` with changes available to review. Set the same reviewer identity in `Add_reviewer`'s body, `Set_vote`, `Reject_PR`, and `Remove_reviewer`; voting requires a connection authorized to act as that reviewer. Live runs create a PR, change approval/rejection votes, create and resolve a thread, remove the reviewer, and attempt to abandon the created PR even if an intermediate step fails. |
 | [Azure DevOps Push and Commit Insights](azure-dev-ops-push-and-commit-insights/manifest.json) | Bind the Repos connection and set the project and repository in every applicable action. Select an existing push ID in `Get_push_commits`, a commit in `Get_commit_changes` and `Report_status`, base/target commits in `Get_diffs`, and an existing path and commit version in `List_items`. The push must contain a commit and the selected path must return at least one item to pass the embedded validation steps. A live run writes a commit status through `Report_status`. |
@@ -148,6 +152,21 @@ actions still require a configured model connection.
 Invoice reminder samples use fixed dates. Adjust those sample dates to exercise
 the overdue, due-soon, and future-invoice cases relative to the day of a test run.
 Keep redacted mock values as `"***"`; never replace them with real credentials.
+
+The four readiness, failure-tracker, sprint-snapshot, and stale-review templates
+return JSON reports containing Markdown and structured details. Their trigger
+samples use synthetic input values, and every connector action, including nested
+reads and writes, has a synthetic mock. Keep all mocks enabled for draft testing;
+changing request values does not change canned mock responses. For live reads,
+replace the request's example resource values and disable the corresponding read
+mocks. The failure tracker defaults to preview mode in its sample request; only
+disable Boards write mocks and set `dryRun: false` when intentionally testing Task
+writes. Do not mix mocked task lookup with real writes, as that can create
+duplicate Tasks. To test its update path with mocks, give `Find_tracking_task` one
+synthetic work-item reference with ID `101`; its default empty result exercises
+the create path when `dryRun` is false. Use an empty `workItems` mock to test an
+empty sprint, or change the readiness reviewer votes and discussion statuses to
+exercise clear and blocked review signals.
 
 The three Azure DevOps lifecycle, push-insights, and discussion templates require
 no HTTP request body; resource selections are configured in the actions, not in

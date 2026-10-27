@@ -1,0 +1,258 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "sprint-delivery-snapshot",
+    "name": "Sprint Delivery Snapshot",
+    "description": "Generate a snapshot of your team’s current Azure Boards iteration. List work items by state, with titles, owners, and links, to support stand-ups and delivery reviews without changing any work items.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Boards",
+      "Sprint",
+      "Reporting"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-boards",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "project",
+                "team"
+              ],
+              "properties": {
+                "project": {
+                  "type": "string",
+                  "title": "Azure DevOps project",
+                  "example": "ExampleProject",
+                  "minLength": 1
+                },
+                "team": {
+                  "type": "string",
+                  "title": "Team ID or name",
+                  "example": "ExampleTeam",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "description": "Read-only. Enter project and team; the team must have a current iteration configured in Azure Boards. Lists up to 100 current-iteration items ordered by state, with owners."
+        }
+      },
+      "actions": {
+        "Find_current_sprint_items": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-boards",
+              "connectionName": "ado-boards_#workflowname#",
+              "operationId": "wiql-query-by-wiql"
+            },
+            "parameters": {
+              "project": "@triggerBody()?['project']",
+              "team": "@triggerBody()?['team']",
+              "$top": 101,
+              "body/query": "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.IterationPath] = @CurrentIteration ORDER BY [System.State], [System.Id]"
+            }
+          },
+          "runAfter": {},
+          "description": "Uses the team's current iteration. Configure the current iteration in Azure Boards first. Reads the first 100 items, ordered by state; a 101st result triggers a limit warning."
+        },
+        "Start_item_list": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "SprintItems",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Find_current_sprint_items": [
+              "Succeeded"
+            ]
+          },
+          "description": "Collects the sprint's titles, states and owners for a single snapshot."
+        },
+        "Read_sprint_items": {
+          "type": "Foreach",
+          "runAfter": {
+            "Start_item_list": [
+              "Succeeded"
+            ]
+          },
+          "foreach": "@take(body('Find_current_sprint_items')?['workItems'],100)",
+          "actions": {
+            "Get_work_item": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "serviceProviderId": "/serviceProviders/ado-boards",
+                  "connectionName": "ado-boards_#workflowname#",
+                  "operationId": "work-items-get-work-item"
+                },
+                "parameters": {
+                  "project": "@triggerBody()?['project']",
+                  "id": "@items('Read_sprint_items')?['id']",
+                  "fields": "System.Id,System.Title,System.State,System.AssignedTo,System.IterationPath,System.WorkItemType",
+                  "asOf": "@body('Find_current_sprint_items')?['asOf']"
+                }
+              },
+              "runAfter": {},
+              "description": "Reads fields at the WIQL query timestamp so the snapshot is consistent."
+            },
+            "Collect_item": {
+              "type": "AppendToArrayVariable",
+              "inputs": {
+                "name": "SprintItems",
+                "value": {
+                  "id": "@body('Get_work_item')?['id']",
+                  "title": "@body('Get_work_item')?['fields']?['System.Title']",
+                  "state": "@body('Get_work_item')?['fields']?['System.State']",
+                  "type": "@body('Get_work_item')?['fields']?['System.WorkItemType']",
+                  "owner": "@coalesce(body('Get_work_item')?['fields']?['System.AssignedTo']?['displayName'],'Unassigned')",
+                  "iteration": "@body('Get_work_item')?['fields']?['System.IterationPath']",
+                  "url": "@concat(first(split(body('Get_work_item')?['url'],'/_apis/')),'/_workitems/edit/',string(body('Get_work_item')?['id']))"
+                }
+              },
+              "runAfter": {
+                "Get_work_item": [
+                  "Succeeded"
+                ]
+              },
+              "description": "Keeps only customer-useful fields. Unassigned work is explicitly labelled."
+            }
+          }
+        },
+        "Format_sprint_snapshot": {
+          "type": "Select",
+          "inputs": {
+            "from": "@variables('SprintItems')",
+            "select": "@concat('- **',item()?['state'],'** | [',string(item()?['id']),'](',item()?['url'],') ',item()?['title'],' | ',item()?['type'],' | ',item()?['owner'])"
+          },
+          "runAfter": {
+            "Read_sprint_items": [
+              "Succeeded"
+            ]
+          },
+          "description": "Lists work in state order without assuming Agile, Scrum or Basic state names."
+        },
+        "Prepare_report": {
+          "type": "Compose",
+          "inputs": {
+            "title": "Sprint Delivery Snapshot",
+            "asOf": "@body('Find_current_sprint_items')?['asOf']",
+            "items": "@variables('SprintItems')",
+            "count": "@length(variables('SprintItems'))",
+            "mayBeTruncated": "@greater(length(body('Find_current_sprint_items')?['workItems']),100)",
+            "markdown": "@concat('# Sprint Delivery Snapshot',decodeUriComponent('%0A%0A'),'Current iteration for the selected team. Items are ordered by state.',decodeUriComponent('%0A%0A'),if(empty(variables('SprintItems')),'No work items were returned for the current iteration.',join(body('Format_sprint_snapshot'),decodeUriComponent('%0A'))),if(greater(length(body('Find_current_sprint_items')?['workItems']),100),concat(decodeUriComponent('%0A%0A'),'Warning: only the first 100 items are shown.'),''))"
+          },
+          "runAfter": {
+            "Format_sprint_snapshot": [
+              "Succeeded"
+            ]
+          },
+          "description": "A shareable delivery snapshot: state, title, type and owner. No work-item updates or sprint changes."
+        },
+        "Return_report": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "@outputs('Prepare_report')"
+          },
+          "runAfter": {
+            "Prepare_report": [
+              "Succeeded"
+            ]
+          },
+          "description": "Returns a readable Markdown summary plus structured details. Failed reads fail the run; they are not reported as empty results."
+        }
+      },
+      "contentVersion": "1.0.0.0",
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "project": "ExampleProject",
+        "team": "ExampleTeam"
+      }
+    }
+  },
+  "mocks": {
+    "Find_current_sprint_items": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "queryType": "flat",
+          "queryResultType": "workItem",
+          "asOf": "2026-01-02T12:00:00Z",
+          "workItems": [
+            {
+              "id": 101,
+              "url": "https://dev.azure.com/example/ExampleProject/_apis/wit/workItems/101"
+            }
+          ]
+        }
+      }
+    },
+    "Get_work_item": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": 101,
+          "rev": 1,
+          "fields": {
+            "System.Id": 101,
+            "System.Title": "Review example documentation",
+            "System.State": "New",
+            "System.WorkItemType": "Task",
+            "System.AssignedTo": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "displayName": "Example Developer",
+              "uniqueName": "developer@example.com"
+            },
+            "System.IterationPath": "ExampleProject\\Sprint 1"
+          },
+          "url": "https://dev.azure.com/example/ExampleProject/_apis/wit/workItems/101"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    }
+  }
+}
