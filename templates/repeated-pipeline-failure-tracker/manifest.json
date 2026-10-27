@@ -1,0 +1,453 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "repeated-pipeline-failure-tracker",
+    "name": "Repeated Pipeline Failure Tracker",
+    "description": "Detect consecutive failures among an Azure DevOps pipeline’s latest completed runs across all branches",
+    "category": [
+      "engineering",
+      "it-ops"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Pipelines",
+      "Boards",
+      "Failures"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-boards",
+      "/serviceProviders/ado-pipelines",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "project",
+                "team",
+                "pipelineId",
+                "failureThreshold",
+                "dryRun"
+              ],
+              "properties": {
+                "project": {
+                  "type": "string",
+                  "title": "Azure DevOps project",
+                  "example": "ExampleProject",
+                  "minLength": 1
+                },
+                "team": {
+                  "type": "string",
+                  "title": "Team ID or name",
+                  "example": "ExampleTeam",
+                  "minLength": 1
+                },
+                "pipelineId": {
+                  "type": "integer",
+                  "title": "Pipeline ID",
+                  "example": 42,
+                  "minimum": 1
+                },
+                "failureThreshold": {
+                  "type": "integer",
+                  "title": "Consecutive completed failures",
+                  "example": 2,
+                  "minimum": 2,
+                  "maximum": 10
+                },
+                "dryRun": {
+                  "type": "boolean",
+                  "title": "Preview only (no Task changes)",
+                  "example": true
+                }
+              }
+            }
+          },
+          "description": "Preview first with dryRun=true; set it false to enable Task creation/updates. Run manually, ONE INSTANCE AT A TIME: task lookup and creation are not atomic, so simultaneous runs can create duplicates. Checks the latest completed runs across ALL pipeline branches. Requires Task write permission only when writes are enabled. Does not queue runs, change Task state or continuously monitor."
+        }
+      },
+      "actions": {
+        "List_pipeline_runs": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-pipelines",
+              "connectionName": "ado-pipelines_#workflowname#",
+              "operationId": "runs-list"
+            },
+            "parameters": {
+              "project": "@triggerBody()?['project']",
+              "pipelineId": "@triggerBody()?['pipelineId']"
+            }
+          },
+          "runAfter": {},
+          "description": "Reads this pipeline's available run history using Pipelines only. No Build connector. The streak is pipeline-wide, across branches."
+        },
+        "Find_completed_runs": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('List_pipeline_runs')?['value']",
+            "where": "@equals(item()?['state'],'completed')"
+          },
+          "runAfter": {
+            "List_pipeline_runs": [
+              "Succeeded"
+            ]
+          },
+          "description": "Ignores running or canceling runs. A canceled or successful completed run breaks the failure streak."
+        },
+        "Latest_completed_runs": {
+          "type": "Compose",
+          "inputs": "@take(reverse(sort(body('Find_completed_runs'),'id')),triggerBody()?['failureThreshold'])",
+          "runAfter": {
+            "Find_completed_runs": [
+              "Succeeded"
+            ]
+          },
+          "description": "Orders by descending numeric run ID and checks only the most recent requested number of completed runs."
+        },
+        "Find_failed_runs": {
+          "type": "Query",
+          "inputs": {
+            "from": "@outputs('Latest_completed_runs')",
+            "where": "@equals(item()?['result'],'failed')"
+          },
+          "runAfter": {
+            "Latest_completed_runs": [
+              "Succeeded"
+            ]
+          },
+          "description": "The threshold is met only if enough completed runs exist and every run in the window failed."
+        },
+        "Track_repeated_failure": {
+          "type": "If",
+          "runAfter": {
+            "Find_failed_runs": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@and(and(equals(length(outputs('Latest_completed_runs')),triggerBody()?['failureThreshold']),equals(length(body('Find_failed_runs')),triggerBody()?['failureThreshold'])),not(coalesce(triggerBody()?['dryRun'],true)))",
+          "actions": {
+            "Find_tracking_task": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "serviceProviderId": "/serviceProviders/ado-boards",
+                  "connectionName": "ado-boards_#workflowname#",
+                  "operationId": "wiql-query-by-wiql"
+                },
+                "parameters": {
+                  "project": "@triggerBody()?['project']",
+                  "team": "@triggerBody()?['team']",
+                  "$top": 2,
+                  "body/query": "@concat('SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.WorkItemType] = ',decodeUriComponent('%27'),'Task',decodeUriComponent('%27'),' AND [System.Tags] CONTAINS ',decodeUriComponent('%27'),concat('OttoPipelineFailure-',string(triggerBody()?['pipelineId'])),decodeUriComponent('%27'))"
+                }
+              },
+              "runAfter": {},
+              "description": "Searches for the pipeline's stable tracking tag. Do not remove this tag from the tracking Task."
+            },
+            "Check_unique_tracking_task": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@body('Find_tracking_task')",
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "workItems"
+                  ],
+                  "properties": {
+                    "workItems": {
+                      "type": "array",
+                      "maxItems": 1,
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Find_tracking_task": [
+                  "Succeeded"
+                ]
+              },
+              "description": "If duplicate tracking Tasks exist, fail visibly rather than silently updating an arbitrary Task."
+            },
+            "Create_or_update_task": {
+              "type": "If",
+              "runAfter": {
+                "Check_unique_tracking_task": [
+                  "Succeeded"
+                ]
+              },
+              "expression": "@not(empty(body('Check_unique_tracking_task')?['workItems']))",
+              "actions": {
+                "Update_tracking_task": {
+                  "type": "ServiceProvider",
+                  "inputs": {
+                    "serviceProviderConfiguration": {
+                      "serviceProviderId": "/serviceProviders/ado-boards",
+                      "connectionName": "ado-boards_#workflowname#",
+                      "operationId": "work-items-update"
+                    },
+                    "parameters": {
+                      "project": "@triggerBody()?['project']",
+                      "id": "@first(body('Check_unique_tracking_task')?['workItems'])?['id']",
+                      "body/fields": {
+                        "System.Description": "@concat('<p>The latest ',string(triggerBody()?['failureThreshold']),' completed runs failed for pipeline ',string(triggerBody()?['pipelineId']),'. This is a pipeline-wide check across all branches, ordered by run ID. In-progress runs are ignored.</p><p>Latest run: ',string(first(outputs('Latest_completed_runs'))?['id']),'</p><p>Run page: ',first(outputs('Latest_completed_runs'))?['_links']?['web']?['href'],'</p><p>Updated by the Pipeline Failure Tracker. Work-item state is never changed automatically.</p>')"
+                      },
+                      "suppressNotifications": true
+                    }
+                  },
+                  "runAfter": {},
+                  "description": "Refreshes failure evidence only. Does not reopen closed Tasks or overwrite the title, owner or tags."
+                }
+              },
+              "else": {
+                "actions": {
+                  "Create_tracking_task": {
+                    "type": "ServiceProvider",
+                    "inputs": {
+                      "serviceProviderConfiguration": {
+                        "serviceProviderId": "/serviceProviders/ado-boards",
+                        "connectionName": "ado-boards_#workflowname#",
+                        "operationId": "work-items-create"
+                      },
+                      "parameters": {
+                        "project": "@triggerBody()?['project']",
+                        "type": "Task",
+                        "suppressNotifications": true,
+                        "body/fields": {
+                          "System.Description": "@concat('<p>The latest ',string(triggerBody()?['failureThreshold']),' completed runs failed for pipeline ',string(triggerBody()?['pipelineId']),'. This is a pipeline-wide check across all branches, ordered by run ID. In-progress runs are ignored.</p><p>Latest run: ',string(first(outputs('Latest_completed_runs'))?['id']),'</p><p>Run page: ',first(outputs('Latest_completed_runs'))?['_links']?['web']?['href'],'</p><p>Updated by the Pipeline Failure Tracker. Work-item state is never changed automatically.</p>')",
+                          "System.Title": "@concat('Investigate repeated failures: pipeline ',string(triggerBody()?['pipelineId']))",
+                          "System.Tags": "@concat('OttoPipelineFailure-',string(triggerBody()?['pipelineId']))"
+                        }
+                      }
+                    },
+                    "runAfter": {},
+                    "description": "Creates one tagged Task using the Task type supported by Basic, Agile and Scrum projects."
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        },
+        "Prepare_report": {
+          "type": "Compose",
+          "inputs": {
+            "title": "Repeated Pipeline Failure Tracker",
+            "thresholdMet": "@and(equals(length(outputs('Latest_completed_runs')),triggerBody()?['failureThreshold']),equals(length(body('Find_failed_runs')),triggerBody()?['failureThreshold']))",
+            "dryRun": "@coalesce(triggerBody()?['dryRun'],true)",
+            "scope": "Pipeline-wide across all branches. Latest completed runs by run ID; running runs ignored. Manual sequential invocation only: concurrent runs can create duplicate Tasks. No automatic state changes or recovery closure.",
+            "checkedRuns": "@outputs('Latest_completed_runs')",
+            "taskId": "@if(and(and(equals(length(outputs('Latest_completed_runs')),triggerBody()?['failureThreshold']),equals(length(body('Find_failed_runs')),triggerBody()?['failureThreshold'])),not(coalesce(triggerBody()?['dryRun'],true))),if(not(empty(body('Check_unique_tracking_task')?['workItems'])),body('Update_tracking_task')?['id'],body('Create_tracking_task')?['id']),json('null'))",
+            "action": "@if(coalesce(triggerBody()?['dryRun'],true),'preview',if(and(equals(length(outputs('Latest_completed_runs')),triggerBody()?['failureThreshold']),equals(length(body('Find_failed_runs')),triggerBody()?['failureThreshold'])),if(not(empty(body('Check_unique_tracking_task')?['workItems'])),'updated','created'),'no change'))",
+            "markdown": "@concat('# Repeated Pipeline Failure Tracker',decodeUriComponent('%0A%0A'),if(coalesce(triggerBody()?['dryRun'],true),concat('Preview only: no Task was created or updated. Failure threshold met: ',string(and(equals(length(outputs('Latest_completed_runs')),triggerBody()?['failureThreshold']),equals(length(body('Find_failed_runs')),triggerBody()?['failureThreshold']))),'.'),if(and(equals(length(outputs('Latest_completed_runs')),triggerBody()?['failureThreshold']),equals(length(body('Find_failed_runs')),triggerBody()?['failureThreshold'])),concat('Repeated failures detected. Tracking Task ',if(not(empty(body('Check_unique_tracking_task')?['workItems'])),'updated','created'),': ',string(if(not(empty(body('Check_unique_tracking_task')?['workItems'])),body('Update_tracking_task')?['id'],body('Create_tracking_task')?['id']))),concat('No change: the latest ',string(triggerBody()?['failureThreshold']),' completed runs are not all failed, or not enough history is available.'))),decodeUriComponent('%0A%0A'),'Scope: pipeline-wide across all branches. Running runs are ignored. Run manually, one instance at a time: concurrent runs can create duplicate Tasks. The Task state is never changed automatically.')"
+          },
+          "runAfter": {
+            "Track_repeated_failure": [
+              "Succeeded"
+            ]
+          },
+          "description": "Returns checked run evidence, the Task ID (if any), and whether this run created, updated or left work unchanged."
+        },
+        "Return_report": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "@outputs('Prepare_report')"
+          },
+          "runAfter": {
+            "Prepare_report": [
+              "Succeeded"
+            ]
+          },
+          "description": "Returns a readable Markdown summary plus structured details. Failed reads fail the run; they are not reported as empty results."
+        }
+      },
+      "contentVersion": "1.0.0.0",
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "project": "ExampleProject",
+        "team": "ExampleTeam",
+        "pipelineId": 42,
+        "failureThreshold": 2,
+        "dryRun": true
+      }
+    }
+  },
+  "mocks": {
+    "List_pipeline_runs": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 4,
+          "value": [
+            {
+              "id": 204,
+              "state": "inProgress",
+              "pipeline": {
+                "id": 42,
+                "name": "example-pipeline"
+              },
+              "url": "https://dev.azure.com/example/ExampleProject/_apis/pipelines/42/runs/204",
+              "_links": {
+                "web": {
+                  "href": "https://dev.azure.com/example/ExampleProject/_build/results?buildId=204"
+                }
+              }
+            },
+            {
+              "id": 203,
+              "state": "completed",
+              "result": "failed",
+              "pipeline": {
+                "id": 42,
+                "name": "example-pipeline"
+              },
+              "url": "https://dev.azure.com/example/ExampleProject/_apis/pipelines/42/runs/203",
+              "_links": {
+                "web": {
+                  "href": "https://dev.azure.com/example/ExampleProject/_build/results?buildId=203"
+                }
+              }
+            },
+            {
+              "id": 202,
+              "state": "completed",
+              "result": "failed",
+              "pipeline": {
+                "id": 42,
+                "name": "example-pipeline"
+              },
+              "url": "https://dev.azure.com/example/ExampleProject/_apis/pipelines/42/runs/202",
+              "_links": {
+                "web": {
+                  "href": "https://dev.azure.com/example/ExampleProject/_build/results?buildId=202"
+                }
+              }
+            },
+            {
+              "id": 201,
+              "state": "completed",
+              "result": "succeeded",
+              "pipeline": {
+                "id": 42,
+                "name": "example-pipeline"
+              },
+              "url": "https://dev.azure.com/example/ExampleProject/_apis/pipelines/42/runs/201",
+              "_links": {
+                "web": {
+                  "href": "https://dev.azure.com/example/ExampleProject/_build/results?buildId=201"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Find_tracking_task": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "queryType": "flat",
+          "queryResultType": "workItem",
+          "asOf": "2026-01-02T12:00:00Z",
+          "workItems": []
+        }
+      }
+    },
+    "Create_tracking_task": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "Created",
+        "body": {
+          "id": 101,
+          "rev": 1,
+          "fields": {
+            "System.Id": 101,
+            "System.Title": "Investigate repeated failures: pipeline 42",
+            "System.State": "New",
+            "System.WorkItemType": "Task",
+            "System.AssignedTo": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "displayName": "Example Developer",
+              "uniqueName": "developer@example.com"
+            },
+            "System.IterationPath": "ExampleProject\\Sprint 1",
+            "System.Description": "The latest two completed runs failed for pipeline 42.",
+            "System.Tags": "OttoPipelineFailure-42"
+          },
+          "url": "https://dev.azure.com/example/ExampleProject/_apis/wit/workItems/101"
+        }
+      }
+    },
+    "Update_tracking_task": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "id": 101,
+          "rev": 2,
+          "fields": {
+            "System.Id": 101,
+            "System.Title": "Investigate repeated failures: pipeline 42",
+            "System.State": "New",
+            "System.WorkItemType": "Task",
+            "System.AssignedTo": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "displayName": "Example Developer",
+              "uniqueName": "developer@example.com"
+            },
+            "System.IterationPath": "ExampleProject\\Sprint 1",
+            "System.Description": "Updated failure evidence for pipeline 42.",
+            "System.Tags": "OttoPipelineFailure-42"
+          },
+          "url": "https://dev.azure.com/example/ExampleProject/_apis/wit/workItems/101"
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    },
+    "ado-pipelines_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-pipelines"
+    }
+  }
+}

@@ -29,5 +29,9 @@
   "azure-dev-ops-pr-discussion-automation",
   "scenario-01-work-item-event-automation",
   "scenario-04-wiql-query-reporting",
-  "scenario-05-sprint-iteration-planning"
+  "scenario-05-sprint-iteration-planning",
+  "pr-readiness-assistant",
+  "repeated-pipeline-failure-tracker",
+  "sprint-delivery-snapshot",
+  "stale-pr-review-digest"
 ]

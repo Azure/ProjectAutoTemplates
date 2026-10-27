@@ -1,0 +1,350 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "pr-readiness-assistant",
+    "name": "PR Readiness Assistant",
+    "description": "Get a review-readiness checklist for an Azure DevOps pull request, including reviewer approvals, blocking votes, open discussions, draft status, mergeability, and linked work items. Highlights items needing attention without modifying the PR or evaluating CI and branch policies.",
+    "category": [
+      "engineering",
+      "data"
+    ],
+    "tags": [
+      "Azure DevOps",
+      "Repos",
+      "Pull requests",
+      "Review"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/ado-repos",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "project",
+                "repositoryId",
+                "pullRequestId"
+              ],
+              "properties": {
+                "project": {
+                  "type": "string",
+                  "title": "Azure DevOps project",
+                  "example": "ExampleProject",
+                  "minLength": 1
+                },
+                "repositoryId": {
+                  "type": "string",
+                  "title": "Repository ID",
+                  "example": "22222222-2222-4222-8222-222222222222",
+                  "minLength": 1
+                },
+                "pullRequestId": {
+                  "type": "integer",
+                  "title": "Pull request ID",
+                  "example": 1,
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "description": "Read-only review checklist for one PR: approvals, required or negative votes, open discussions, draft and merge status, and linked work items. Does not merge or change the PR."
+        }
+      },
+      "actions": {
+        "Get_pull_request": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "connectionName": "ado-repos_#workflowname#",
+              "operationId": "pull-requests-get"
+            },
+            "parameters": {
+              "project": "@triggerBody()?['project']",
+              "repositoryId": "@triggerBody()?['repositoryId']",
+              "pullRequestId": "@triggerBody()?['pullRequestId']"
+            }
+          },
+          "runAfter": {},
+          "description": "Reads PR status, draft flag and mergeability. This template does not evaluate branch policies or run CI."
+        },
+        "Get_reviewers": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "connectionName": "ado-repos_#workflowname#",
+              "operationId": "pull-request-reviewers-list"
+            },
+            "parameters": {
+              "project": "@triggerBody()?['project']",
+              "repositoryId": "@triggerBody()?['repositoryId']",
+              "pullRequestId": "@triggerBody()?['pullRequestId']"
+            }
+          },
+          "runAfter": {},
+          "description": "Reads reviewer votes; it never votes on behalf of a user."
+        },
+        "Get_discussions": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "connectionName": "ado-repos_#workflowname#",
+              "operationId": "pull-request-threads-list"
+            },
+            "parameters": {
+              "project": "@triggerBody()?['project']",
+              "repositoryId": "@triggerBody()?['repositoryId']",
+              "pullRequestId": "@triggerBody()?['pullRequestId']"
+            }
+          },
+          "runAfter": {},
+          "description": "Reads discussion status without adding or resolving comments."
+        },
+        "Get_linked_work_items": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/ado-repos",
+              "connectionName": "ado-repos_#workflowname#",
+              "operationId": "pull-request-work-items-list"
+            },
+            "parameters": {
+              "project": "@triggerBody()?['project']",
+              "repositoryId": "@triggerBody()?['repositoryId']",
+              "pullRequestId": "@triggerBody()?['pullRequestId']"
+            }
+          },
+          "runAfter": {},
+          "description": "Includes linked work-item IDs as context. A linked item is not treated as proof of policy compliance."
+        },
+        "Find_review_blockers": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Get_reviewers')?['value']",
+            "where": "@or(less(coalesce(item()?['vote'],0),0),and(equals(item()?['isRequired'],true),lessOrEquals(coalesce(item()?['vote'],0),0)))"
+          },
+          "runAfter": {
+            "Get_reviewers": [
+              "Succeeded"
+            ]
+          },
+          "description": "Flags negative votes and required reviewers who have not approved."
+        },
+        "Find_approvals": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Get_reviewers')?['value']",
+            "where": "@greater(coalesce(item()?['vote'],0),0)"
+          },
+          "runAfter": {
+            "Get_reviewers": [
+              "Succeeded"
+            ]
+          },
+          "description": "Requires at least one positive reviewer vote before review signals can be clear."
+        },
+        "Find_open_discussions": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Get_discussions')?['value']",
+            "where": "@and(not(equals(item()?['isDeleted'],true)),or(equals(item()?['status'],'active'),equals(item()?['status'],'pending')))"
+          },
+          "runAfter": {
+            "Get_discussions": [
+              "Succeeded"
+            ]
+          },
+          "description": "Keeps active and pending discussions, excluding deleted threads."
+        },
+        "Prepare_report": {
+          "type": "Compose",
+          "inputs": {
+            "title": "PR Readiness Assistant",
+            "reviewSignalsClear": "@and(equals(body('Get_pull_request')?['status'],'active'),not(equals(body('Get_pull_request')?['isDraft'],true)),equals(body('Get_pull_request')?['mergeStatus'],'succeeded'),not(empty(body('Find_approvals'))),empty(body('Find_review_blockers')),empty(body('Find_open_discussions')))",
+            "pullRequest": "@body('Get_pull_request')",
+            "reviewers": "@body('Get_reviewers')?['value']",
+            "reviewBlockers": "@body('Find_review_blockers')",
+            "openDiscussions": "@body('Find_open_discussions')",
+            "linkedWorkItems": "@body('Get_linked_work_items')?['value']",
+            "scope": "Review signals only. Branch policies, CI results and merge permissions are not evaluated. This is not merge authorization.",
+            "markdown": "@concat('# PR Readiness Assistant',decodeUriComponent('%0A%0A'),'PR ',string(triggerBody()?['pullRequestId']),': ',body('Get_pull_request')?['title'],decodeUriComponent('%0A%0A'),if(and(equals(body('Get_pull_request')?['status'],'active'),not(equals(body('Get_pull_request')?['isDraft'],true)),equals(body('Get_pull_request')?['mergeStatus'],'succeeded'),not(empty(body('Find_approvals'))),empty(body('Find_review_blockers')),empty(body('Find_open_discussions'))),'Review signals are clear.','Needs review or attention.'),decodeUriComponent('%0A'),'- PR status: ',body('Get_pull_request')?['status'],decodeUriComponent('%0A'),'- Draft: ',string(coalesce(body('Get_pull_request')?['isDraft'],false)),decodeUriComponent('%0A'),'- Merge status: ',coalesce(body('Get_pull_request')?['mergeStatus'],'not reported'),decodeUriComponent('%0A'),'- Positive votes: ',string(length(body('Find_approvals'))),decodeUriComponent('%0A'),'- Review blockers: ',string(length(body('Find_review_blockers'))),decodeUriComponent('%0A'),'- Open discussions: ',string(length(body('Find_open_discussions'))),decodeUriComponent('%0A'),'- Linked work items: ',string(length(body('Get_linked_work_items')?['value'])),decodeUriComponent('%0A%0A'),'Review signals only. Branch policies, CI results and merge permissions are not evaluated. This is not merge authorization.')"
+          },
+          "runAfter": {
+            "Get_pull_request": [
+              "Succeeded"
+            ],
+            "Get_linked_work_items": [
+              "Succeeded"
+            ],
+            "Find_review_blockers": [
+              "Succeeded"
+            ],
+            "Find_approvals": [
+              "Succeeded"
+            ],
+            "Find_open_discussions": [
+              "Succeeded"
+            ]
+          },
+          "description": "Explains the checklist without claiming that the PR is safe to merge. Blocker and discussion details are included in JSON."
+        },
+        "Return_report": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "@outputs('Prepare_report')"
+          },
+          "runAfter": {
+            "Prepare_report": [
+              "Succeeded"
+            ]
+          },
+          "description": "Returns a readable Markdown summary plus structured details. Failed reads fail the run; they are not reported as empty results."
+        }
+      },
+      "contentVersion": "1.0.0.0",
+      "outputs": {}
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "project": "ExampleProject",
+        "repositoryId": "22222222-2222-4222-8222-222222222222",
+        "pullRequestId": 1
+      }
+    }
+  },
+  "mocks": {
+    "Get_pull_request": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "repository": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "example-repo",
+            "project": {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "name": "ExampleProject"
+            },
+            "url": "https://dev.azure.com/example/ExampleProject/_apis/git/repositories/22222222-2222-4222-8222-222222222222",
+            "webUrl": "https://dev.azure.com/example/ExampleProject/_git/example-repo"
+          },
+          "pullRequestId": 1,
+          "status": "active",
+          "createdBy": {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "displayName": "Example Developer",
+            "uniqueName": "developer@example.com"
+          },
+          "creationDate": "2026-01-01T12:00:00Z",
+          "title": "Update example documentation",
+          "description": "Synthetic pull request for draft testing.",
+          "sourceRefName": "refs/heads/docs/example",
+          "targetRefName": "refs/heads/main",
+          "mergeStatus": "succeeded",
+          "isDraft": false,
+          "url": "https://dev.azure.com/example/ExampleProject/_apis/git/repositories/22222222-2222-4222-8222-222222222222/pullRequests/1"
+        }
+      }
+    },
+    "Get_reviewers": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 2,
+          "value": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "displayName": "Example Developer",
+              "uniqueName": "developer@example.com",
+              "vote": 10,
+              "isRequired": false
+            },
+            {
+              "id": "44444444-4444-4444-8444-444444444444",
+              "displayName": "Example Required Reviewer",
+              "uniqueName": "reviewer@example.com",
+              "vote": 0,
+              "isRequired": true
+            }
+          ]
+        }
+      }
+    },
+    "Get_discussions": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "id": 1,
+              "status": "active",
+              "isDeleted": false,
+              "comments": [
+                {
+                  "id": 1,
+                  "author": {
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "displayName": "Example Developer",
+                    "uniqueName": "developer@example.com"
+                  },
+                  "content": "Please add an example to the documentation.",
+                  "commentType": "text"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "Get_linked_work_items": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "count": 1,
+          "value": [
+            {
+              "id": "101",
+              "url": "https://dev.azure.com/example/ExampleProject/_apis/wit/workItems/101"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "connections": {
+    "ado-repos_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-repos"
+    }
+  }
+}
