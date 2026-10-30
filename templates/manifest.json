@@ -33,5 +33,6 @@
   "pr-readiness-assistant",
   "repeated-pipeline-failure-tracker",
   "sprint-delivery-snapshot",
-  "stale-pr-review-digest"
+  "stale-pr-review-digest",
+  "demo-oct30"
 ]
