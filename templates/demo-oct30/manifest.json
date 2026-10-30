@@ -1,0 +1,205 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "demo-oct30",
+    "name": "demo-Oct30",
+    "description": "Returns today's MSN Weather forecast for the location supplied in an HTTP request.",
+    "category": [
+      "api"
+    ],
+    "tags": [],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/managedApis/msnweather",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_a_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "Location for the weather"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Get_forecast_for_today": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/managedApis/msnweather",
+              "operationId": "TodaysForecast",
+              "connection": {
+                "referenceName": "msnweather_#workflowname#"
+              }
+            },
+            "method": "get",
+            "path": "/forecast/today/${encodeURIComponent(triggerBody()?.['location'])}",
+            "queries": {
+              "units": "I"
+            }
+          },
+          "metadata": {
+            "swaggerPathTemplate": "/{connectionId}/forecast/today/{Location}"
+          }
+        },
+        "Response": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 200,
+            "body": "${body('Get_forecast_for_today')}"
+          },
+          "runAfter": {
+            "Get_forecast_for_today": [
+              "SUCCEEDED"
+            ]
+          },
+          "kind": "Http"
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_a_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "location": "Seattle, WA"
+      }
+    }
+  },
+  "mocks": {
+    "Get_forecast_for_today": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": {
+          "responses": {
+            "daily": {
+              "day": {
+                "cap": "Light rain showers",
+                "pvdrCap": "Light rain showers",
+                "pvdrWindDir": "56",
+                "pvdrWindSpd": "5",
+                "icon": 19,
+                "symbol": "d3100",
+                "pvdrIcon": "19",
+                "urlIcon": "http://img-s-msn-com.akamaized.net/tenant/amp/entityid/AAehyQD.img",
+                "precip": 81,
+                "wx": "SHRA",
+                "sky": "BKN",
+                "windDir": 56,
+                "windSpd": 5,
+                "summary": "Scattered light rain showers are expected.  The high will be 51°.",
+                "summaries": [
+                  "Scattered light rain showers are expected.",
+                  " The high will be 51°."
+                ]
+              },
+              "night": {
+                "cap": "Mostly clear",
+                "pvdrCap": "Mostly clear",
+                "pvdrWindDir": "88",
+                "pvdrWindSpd": "2",
+                "icon": 29,
+                "symbol": "n1000",
+                "pvdrIcon": "29",
+                "urlIcon": "http://img-s-msn-com.akamaized.net/tenant/amp/entityid/AAehwh2.img",
+                "precip": 7,
+                "sky": "SCT",
+                "windDir": 88,
+                "windSpd": 2,
+                "summary": "The skies will be mostly clear.  The low will be 39°.",
+                "summaries": [
+                  "The skies will be mostly clear.",
+                  " The low will be 39°."
+                ],
+                "wx": ""
+              },
+              "pvdrCap": "Light rain showers",
+              "pvdrWindDir": "56",
+              "pvdrWindSpd": "5",
+              "valid": "2026-10-30T07:00:00+00:00",
+              "icon": 19,
+              "symbol": "d3100",
+              "pvdrIcon": "19",
+              "iconUrl": "http://img-s-msn-com.akamaized.net/tenant/amp/entityid/AAehyQD.img",
+              "precip": 81,
+              "windMax": 5,
+              "windMaxDir": 56,
+              "windTh": 14.8,
+              "rhHi": 97,
+              "rhLo": 77,
+              "tempHi": 51,
+              "tempLo": 39,
+              "uv": 0,
+              "uvDesc": "Low",
+              "created": "2026-10-30T16:50:00+00:00",
+              "rainAmount": 0.08,
+              "snowAmount": 0
+            },
+            "almanac": {
+              "valid": "2026-10-30T07:00:00+00:00",
+              "sunrise": "2026-10-30T14:50:08+00:00",
+              "sunset": "2026-10-31T00:55:05+00:00",
+              "moonrise": "2026-10-31T04:35:42+00:00",
+              "moonset": "2026-10-30T20:34:36+00:00",
+              "moonState": "1",
+              "moonPhase": "Waning Gibbous",
+              "moonPhaseCode": "WaGi"
+            },
+            "provider": {
+              "name": "Foreca",
+              "url": "http://www.foreca.com"
+            },
+            "source": {
+              "id": "105809844",
+              "coordinates": {
+                "lat": 47.60620880126953,
+                "lon": -122.33206939697266
+              },
+              "location": "Seattle, WA",
+              "utcOffset": "-07:00:00",
+              "countryCode": "US"
+            }
+          },
+          "units": {
+            "system": "Imperial",
+            "pressure": "in",
+            "temperature": "°F",
+            "speed": "mph",
+            "height": "in",
+            "distance": "mi",
+            "time": "s"
+          },
+          "copyright": "Copyright © 2026 Microsoft and its suppliers. All rights reserved. This API cannot be accessed and the content and any results may not be used, reproduced or transmitted in any manner without express written permission from Microsoft Corporation."
+        }
+      }
+    }
+  },
+  "connections": {
+    "msnweather_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/msnweather"
+    }
+  }
+}
