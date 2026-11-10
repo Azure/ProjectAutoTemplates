@@ -1,0 +1,203 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "send-daily-health-email-based-on-azure-monitor-logs",
+    "name": "Send daily application health email",
+    "description": "Email a daily application health report using Application Insights request telemetry in Azure Monitor Logs.",
+    "category": [
+      "it-ops",
+      "communication"
+    ],
+    "tags": [
+      "Azure Monitor Logs",
+      "Application Insights",
+      "Health",
+      "Email"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/azmonitorlogs",
+      "/managedApis/office365"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "inputs": {},
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1
+          }
+        }
+      },
+      "actions": {
+        "Query_health": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/azmonitorlogs",
+              "operationId": "workspace-run-query",
+              "connectionName": "azmonitorlogs_#workflowname#"
+            },
+            "parameters": {
+              "workspaceId": "<log-analytics-workspace-id>",
+              "body/query": "AppRequests\n| where TimeGenerated >= ago(24h)\n| where _ResourceId =~ \"<application-insights-resource-id>\"\n| summarize\n    Requests = sum(ItemCount),\n    FailedRequests = sumif(ItemCount, Success == false),\n    KnownOutcomeRequests = sumif(ItemCount, isnotnull(Success)),\n    P95DurationMs = percentilew(DurationMs, ItemCount, 95)\n| project\n    Requests,\n    FailedRequests,\n    FailureRatePct = iff(\n        KnownOutcomeRequests == 0,\n        real(null),\n        round(100.0 * FailedRequests / KnownOutcomeRequests, 2)\n    ),\n    P95DurationMs = round(P95DurationMs, 1)"
+            }
+          },
+          "runAfter": {}
+        },
+        "Check_query_error": {
+          "type": "If",
+          "runAfter": {
+            "Query_health": [
+              "Succeeded"
+            ]
+          },
+          "expression": "@not(equals(body('Query_health')?['error'], json('null')))",
+          "actions": {
+            "Stop_query_error": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "QueryReturnedError",
+                  "message": "Health report query returned an error or partial result."
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {
+              "Metrics_row": {
+                "type": "Compose",
+                "inputs": "@body('Query_health')['tables'][0]['rows'][0]",
+                "runAfter": {},
+                "metadata": {
+                  "parameterContentTypes": {
+                    "inputs": "json"
+                  }
+                }
+              },
+              "Report_html": {
+                "type": "Compose",
+                "inputs": "@concat(\n  '<h2>Daily application health</h2>',\n  '<p>Reporting window: previous 24 hours.</p>',\n  '<p>Counts are estimates when telemetry is sampled; failure rate uses requests with a known outcome, and p95 is an estimate.</p>',\n  if(\n    equals(outputs('Metrics_row')[0], 0),\n    '<p><b>No request data found. Health is unknown.</b></p>',\n    ''\n  ),\n  '<table border=\"1\" cellpadding=\"6\">',\n  '<tr><th>Metric</th><th>Value</th></tr>',\n  '<tr><td>Requests</td><td>',\n  string(outputs('Metrics_row')[0]),\n  '</td></tr>',\n  '<tr><td>Failed requests</td><td>',\n  string(outputs('Metrics_row')[1]),\n  '</td></tr>',\n  '<tr><td>Failure rate (%)</td><td>',\n  string(coalesce(outputs('Metrics_row')[2], 'N/A')),\n  '</td></tr>',\n  '<tr><td>P95 duration (ms)</td><td>',\n  string(coalesce(outputs('Metrics_row')[3], 'N/A')),\n  '</td></tr></table>'\n)",
+                "runAfter": {
+                  "Metrics_row": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "parameterContentTypes": {
+                    "inputs": "json"
+                  }
+                }
+              },
+              "Send_an_email_(V2)": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "apiId": "/managedApis/office365",
+                    "operationId": "SendEmailV2",
+                    "connection": {
+                      "referenceName": "office365_#workflowname#"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/Mail",
+                  "body": {
+                    "Body": "@outputs('Report_html')",
+                    "Importance": "Normal",
+                    "To": "recipient@example.com",
+                    "Subject": "Daily application health report"
+                  }
+                },
+                "runAfter": {
+                  "Report_html": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "swaggerPathTemplate": "/{connectionId}/v2/Mail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "Recurrence",
+    "outputs": {
+      "method": "POST",
+      "headers": {},
+      "queries": {},
+      "body": null
+    }
+  },
+  "mocks": {
+    "Query_health": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "Requests",
+                  "type": "long"
+                },
+                {
+                  "name": "FailedRequests",
+                  "type": "long"
+                },
+                {
+                  "name": "FailureRatePct",
+                  "type": "real"
+                },
+                {
+                  "name": "P95DurationMs",
+                  "type": "real"
+                }
+              ],
+              "rows": [
+                [
+                  100,
+                  10,
+                  10,
+                  1500
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "Send_an_email_(V2)": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": null
+      }
+    }
+  },
+  "connections": {
+    "azmonitorlogs_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/azmonitorlogs"
+    },
+    "office365_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/office365"
+    }
+  }
+}
