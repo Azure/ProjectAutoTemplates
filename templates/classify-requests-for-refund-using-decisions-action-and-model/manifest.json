@@ -1,0 +1,105 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "classify-requests-for-refund-using-decisions-action-and-model",
+    "name": "Classify requests for refund using decisions action and model",
+    "description": "This workflow uses the Yes/No decisions actions to determine if a request is for refund. And if so, it sends the request for refund processing",
+    "category": [
+      "ai",
+      "categorization"
+    ],
+    "tags": [],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Yes_No": {
+          "type": "Decision",
+          "inputs": {
+            "state": "I was charged twice. Please send back the extra payment",
+            "questions": {
+              "decision": {
+                "type": "noul",
+                "instructions": "Is the customer asking for a refund?",
+                "criteria": {
+                  "true": "Yes",
+                  "false": "No"
+                }
+              }
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "parameterContentTypes": {
+              "state": "text"
+            }
+          }
+        },
+        "Condition": {
+          "type": "If",
+          "runAfter": {
+            "Yes_No": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greater": [
+                  "${outputs('Yes_No')['decision']['trueProbability']}",
+                  0.75
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Refund_Queue": {
+              "type": "Compose",
+              "inputs": "Process Refund",
+              "runAfter": {},
+              "metadata": {
+                "parameterContentTypes": {
+                  "inputs": "text"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      },
+      "body": null
+    }
+  },
+  "mocks": {},
+  "connections": {}
+}

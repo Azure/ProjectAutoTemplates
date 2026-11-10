@@ -1,0 +1,153 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "route-support-tickets-to-the-right-team-using-the-decisions-api",
+    "name": "Route support tickets to the right team using the Decisions API.",
+    "description": "Route incoming support tickets to the right team using the Decisions API choice question. Every decision comes with a confidence score, so unclear tickets can be flagged for a person",
+    "category": [
+      "ai",
+      "categorization"
+    ],
+    "tags": [],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Choice": {
+          "type": "Decision",
+          "inputs": {
+            "state": "The app crashes every time I try to upload a photo. I’m on the latest version.",
+            "questions": {
+              "decision": {
+                "type": "choice",
+                "instructions": "Route incoming support tickets to the right team",
+                "criteria": {
+                  "Billing": "billing questions",
+                  "Shipping": "shipping questions",
+                  "Account access": "account access questions",
+                  "Technical Support": "technical support questions"
+                }
+              }
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "parameterContentTypes": {
+              "state": "text"
+            }
+          }
+        },
+        "Switch": {
+          "type": "Switch",
+          "runAfter": {
+            "Choice": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "parameterContentTypes": {
+              "expression": "json"
+            }
+          },
+          "expression": "${outputs('Choice')['decision']['choice']}",
+          "cases": {
+            "Billing": {
+              "case": "Billing",
+              "actions": {
+                "Billing-queue": {
+                  "type": "Compose",
+                  "inputs": "Replace this step with processing for billing questions",
+                  "runAfter": {},
+                  "metadata": {
+                    "parameterContentTypes": {
+                      "inputs": "text"
+                    }
+                  }
+                }
+              }
+            },
+            "Shipping": {
+              "case": "Shipping",
+              "actions": {
+                "Shipping-queue": {
+                  "type": "Compose",
+                  "inputs": "Replace this step with processing for shipping questions",
+                  "runAfter": {},
+                  "metadata": {
+                    "parameterContentTypes": {
+                      "inputs": "text"
+                    }
+                  }
+                }
+              }
+            },
+            "Account_access": {
+              "case": "Account access",
+              "actions": {
+                "Account_access_queue": {
+                  "type": "Compose",
+                  "inputs": "Replace this step with processing for account access questions",
+                  "runAfter": {},
+                  "metadata": {
+                    "parameterContentTypes": {
+                      "inputs": "text"
+                    }
+                  }
+                }
+              }
+            },
+            "Technical_Support": {
+              "case": "Technical Support",
+              "actions": {
+                "Tech_Support_queue": {
+                  "type": "Compose",
+                  "inputs": "Replace this step with processing for tech support questions",
+                  "runAfter": {},
+                  "metadata": {
+                    "parameterContentTypes": {
+                      "inputs": "text"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "actions": {}
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      },
+      "body": null
+    }
+  },
+  "mocks": {},
+  "connections": {}
+}

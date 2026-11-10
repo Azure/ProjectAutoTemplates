@@ -1,0 +1,219 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "classify-recipes-as-vegetarian-by-meal-type-and-difficulty",
+    "name": "Classify recipes as vegetarian, by meal type, and difficulty",
+    "description": "Use the Decisions yes/no, choice, and score APIs to check if a recipe is vegetarian, pick its meal type, and rate its difficulty. Each result includes a confidence value, so unclear recipes are flagged for review.",
+    "category": [
+      "ai",
+      "categorization"
+    ],
+    "tags": [],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request",
+      "/managedApis/outlook"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Veg-Yes-No": {
+          "type": "Decision",
+          "inputs": {
+            "state": "${outputs('Recipie')}",
+            "questions": {
+              "decision": {
+                "type": "noul",
+                "instructions": "Is this recipe vegetarian? It must contain no meat, poultry, or fish, including broths made from them.",
+                "criteria": {
+                  "true": "Yes",
+                  "false": "No"
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Recipie": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "parameterContentTypes": {
+              "state": "text"
+            }
+          }
+        },
+        "Recipie": {
+          "type": "Compose",
+          "inputs": "Recipe: Creamy Mushroom Risotto\nTotal time: 45 minutes\n\nIngredients: Arborio rice, mushrooms, onion, garlic, vegetable broth, white wine, parmesan, butter, parsley\n\nSteps: Sauté onion and garlic in butter. Add mushrooms and cook until browned. Stir in rice and toast for 2 minutes. Add wine, then add warm broth one ladle at a time, stirring constantly for about 25 minutes until creamy. Finish with parmesan and parsley.",
+          "runAfter": {},
+          "metadata": {
+            "parameterContentTypes": {
+              "inputs": "text"
+            }
+          }
+        },
+        "Is_Veg": {
+          "type": "If",
+          "runAfter": {
+            "Veg-Yes-No": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "greater": [
+                  "${outputs('Veg-Yes-No')['decision']['trueProbability']}",
+                  0.75
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Recipe-difficulty-score": {
+              "type": "Decision",
+              "inputs": {
+                "state": "${outputs('Recipie')}",
+                "questions": {
+                  "decision": {
+                    "type": "score",
+                    "instructions": "How difficult is this recipe for a home cook? Consider technique, active attention needed, number of steps, and special equipment.",
+                    "criteria": [
+                      "Easy",
+                      "Moderate",
+                      "Difficult"
+                    ]
+                  }
+                }
+              },
+              "metadata": {
+                "parameterContentTypes": {
+                  "state": "json"
+                }
+              }
+            },
+            "Is_Easy_Moderate": {
+              "type": "If",
+              "runAfter": {
+                "Recipe-difficulty-score": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "and": [
+                  {
+                    "less": [
+                      "${outputs('Recipe-difficulty-score')['decision']['score']}",
+                      2
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Receipie-type-choice": {
+                  "type": "Decision",
+                  "inputs": {
+                    "state": "${outputs('Recipie')}",
+                    "questions": {
+                      "decision": {
+                        "type": "choice",
+                        "instructions": "What type of meal is this recipe best suited for?",
+                        "criteria": {
+                          "Breakfast": "Morning meals and brunch",
+                          "Lunch": "Main morning or evening meals",
+                          "Dessert": "Sweet dishes and baked treats"
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {},
+                  "metadata": {
+                    "parameterContentTypes": {
+                      "state": "json"
+                    }
+                  }
+                },
+                "Send_an_email_(V2)": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/managedApis/outlook",
+                      "operationId": "SendEmailV2",
+                      "connection": {
+                        "referenceName": "outlook_#workflowname#"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/v2/Mail",
+                    "body": {
+                      "Body": "<p class=\"editor-paragraph\"><span style=\"white-space: pre-wrap;\">I found this interesting and easy recipe for </span>${outputs('Receipie-type-choice')['decision']['choice']}<span style=\"white-space: pre-wrap;\">. Try it out !</span></p><p class=\"editor-paragraph\"><br></p><p class=\"editor-paragraph\">${outputs('Recipie')}</p>",
+                      "Importance": "Normal",
+                      "To": "recipient@example.com",
+                      "Subject": "Vegetarian Recipe -  ${outputs('Receipie-type-choice')['decision']['choice']}"
+                    }
+                  },
+                  "runAfter": {
+                    "Receipie-type-choice": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "swaggerPathTemplate": "/{connectionId}/v2/Mail"
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      },
+      "body": null
+    }
+  },
+  "mocks": {
+    "Send_an_email_(V2)": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "200",
+        "body": null
+      }
+    }
+  },
+  "connections": {
+    "outlook_#workflowname#": {
+      "connectorType": "shared",
+      "apiId": "/managedApis/outlook"
+    }
+  }
+}

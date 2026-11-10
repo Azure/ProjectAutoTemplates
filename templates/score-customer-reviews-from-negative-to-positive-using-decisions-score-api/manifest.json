@@ -1,0 +1,106 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "score-customer-reviews-from-negative-to-positive-using-decisions-score-api",
+    "name": "Score customer reviews from negative to positive using Decisions score API",
+    "description": "Measure how customers really feel by scoring reviews from negative to positive with the Decisions score API.\nScores fall between levels for mixed opinions, giving you a finer read than a simple positive or negative label.",
+    "category": [
+      "ai",
+      "categorization"
+    ],
+    "tags": [],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "Score": {
+          "type": "Decision",
+          "inputs": {
+            "state": "Oh great, another charger that stops working after a week. Just what I needed.",
+            "questions": {
+              "decision": {
+                "type": "score",
+                "instructions": "Identify the sentiment of customer reviews provided to you",
+                "criteria": [
+                  "Negative",
+                  "Neutral",
+                  "Positive"
+                ]
+              }
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "parameterContentTypes": {
+              "state": "text"
+            }
+          }
+        },
+        "Condition": {
+          "type": "If",
+          "runAfter": {
+            "Score": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "less": [
+                  "${outputs('Score')['decision']['score']}",
+                  1
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "NegativeReview": {
+              "type": "Compose",
+              "inputs": "Loop in Customer Support",
+              "runAfter": {},
+              "metadata": {
+                "parameterContentTypes": {
+                  "inputs": "text"
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json"
+      },
+      "queries": {
+        "code": "***"
+      },
+      "body": null
+    }
+  },
+  "mocks": {},
+  "connections": {}
+}
