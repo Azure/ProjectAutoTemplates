@@ -1,0 +1,111 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "list-all-recommendations",
+    "name": "List Azure Advisor Recommendations",
+    "description": "Retrieve a page of Azure Advisor recommendations for a configured subscription without a category filter. Inspect the action output for recommendation details and any nextLink; this workflow does not follow additional pages.",
+    "category": ["it-ops", "data"],
+    "tags": ["Azure Advisor", "Recommendations", "Azure"],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/azadvisor",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "List_recommendations": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/azadvisor",
+              "operationId": "recommendations-list",
+              "connectionName": "azadvisor_#workflowname#"
+            },
+            "parameters": {
+              "subscriptionId": ""
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": null
+    }
+  },
+  "mocks": {
+    "List_recommendations": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "id": "/subscriptions/11111111-1111-4111-8111-111111111111/providers/Microsoft.Advisor/recommendations/22222222-2222-4222-8222-222222222222",
+              "name": "22222222-2222-4222-8222-222222222222",
+              "type": "Microsoft.Advisor/recommendations",
+              "properties": {
+                "category": "Cost",
+                "impact": "Medium",
+                "impactedField": "Microsoft.Web/serverfarms",
+                "impactedValue": "example-plan",
+                "shortDescription": {
+                  "problem": "An example App Service plan has no active apps.",
+                  "solution": "Review whether the unused plan is still required."
+                },
+                "resourceMetadata": {
+                  "resourceId": "/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/example-rg/providers/Microsoft.Web/serverfarms/example-plan"
+                }
+              }
+            },
+            {
+              "id": "/subscriptions/11111111-1111-4111-8111-111111111111/providers/Microsoft.Advisor/recommendations/33333333-3333-4333-8333-333333333333",
+              "name": "33333333-3333-4333-8333-333333333333",
+              "type": "Microsoft.Advisor/recommendations",
+              "properties": {
+                "category": "Performance",
+                "impact": "High",
+                "impactedField": "Microsoft.DBforPostgreSQL/flexibleServers",
+                "impactedValue": "example-postgres",
+                "shortDescription": {
+                  "problem": "An example database needs a performance review.",
+                  "solution": "Review database statistics and workload requirements."
+                },
+                "resourceMetadata": {
+                  "resourceId": "/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/example-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/example-postgres"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "connections": {
+    "azadvisor_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/azadvisor"
+    }
+  }
+}
