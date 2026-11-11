@@ -90,8 +90,10 @@
         "Validate_Request": {
           "type": "If",
           "runAfter": {
-            "Build_Query_Options": [
-              "Succeeded"
+            "Run_a_resource_query": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
             ]
           },
           "expression": {
@@ -226,6 +228,26 @@
               }
             }
           }
+        },
+        "Run_a_resource_query": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/azgraph",
+              "operationId": "resources-query",
+              "connectionName": "azgraph_#workflowname#"
+            },
+            "parameters": {
+              "body/query": "@outputs('Normalize_Request')?['query']",
+              "body/subscriptions": "@outputs('Normalize_Request')?['subscriptionIds']",
+              "body/options": "@outputs('Build_Query_Options')"
+            }
+          },
+          "runAfter": {
+            "Build_Query_Options": [
+              "Succeeded"
+            ]
+          }
         }
       },
       "contentVersion": "1.0.0.0"
@@ -250,6 +272,61 @@
   },
   "mocks": {
     "Query_Resources": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "totalRecords": 12,
+          "count": 5,
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/vm-web-01",
+              "name": "vm-web-01",
+              "type": "microsoft.compute/virtualmachines",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/vm-web-02",
+              "name": "vm-web-02",
+              "type": "microsoft.compute/virtualmachines",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Logic/workflows/example-workflow",
+              "name": "example-workflow",
+              "type": "microsoft.logic/workflows",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "westus2"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Network/virtualNetworks/example-vnet",
+              "name": "example-vnet",
+              "type": "microsoft.network/virtualnetworks",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Storage/storageAccounts/examplestorage01",
+              "name": "examplestorage01",
+              "type": "microsoft.storage/storageaccounts",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            }
+          ],
+          "facets": [],
+          "resultTruncated": "false",
+          "$skipToken": "example-continuation-token"
+        }
+      }
+    },
+    "Run_a_resource_query": {
       "status": "Succeeded",
       "outputs": {
         "statusCode": "OK",
