@@ -127,6 +127,8 @@ actions still require a configured model connection.
 
 | Template | Configuration before a live run |
 | --- | --- |
+| [Create Tasks for Azure Advisor cost recommendations](get-advisor-recommendations/manifest.json) | Requires a portal/runtime supporting the exported `${...}` expressions. Bind Advisor and Boards connections, set `List_recommendations`'s subscription ID, and choose a Boards project supporting Task in the nested `Create_a_work_item` action. The Advisor identity needs permission to read recommendations; the Boards identity needs permission to create Tasks. Keep both mocks enabled for draft tests. Disable only the Advisor mock to inspect real recommendations without creating Tasks; disable the Boards mock only when intentionally writing to the chosen project. Creates one Task for each nonempty High/Medium group on the returned page; Low-impact results are ignored. Repeated live runs can create duplicate Tasks. |
+| [List Azure Advisor recommendations](list-all-recommendations/manifest.json) | Bind the Advisor connection and set the subscription ID in `List_recommendations`, using an identity permitted to read recommendations. Keep the synthetic mock enabled for draft tests; disable it for a live read. No category filter is applied and no resources are modified. |
 | [Recipe classification with Decisions](classify-recipes-as-vegetarian-by-meal-type-and-difficulty/manifest.json) | Requires a portal/runtime supporting Decision actions. Replace the fixed recipe in `Recipie` to try other inputs. Bind the Outlook.com connection and replace the example recipient before disabling the email mock. Email is sent only when vegetarian probability exceeds 0.75 and difficulty score is below 2. Meal classification runs only on that branch. |
 | [Refund request classification with Decisions](classify-requests-for-refund-using-decisions-action-and-model/manifest.json) | Requires a portal/runtime supporting Decision actions. Replace `Yes_No`'s fixed sample text to try other requests. `Refund_Queue` is a Compose placeholder reached when refund probability exceeds 0.75; replace it with your refund-processing integration. No refund is issued by this template. |
 | [Support ticket routing with Decisions](route-support-tickets-to-the-right-team-using-the-decisions-api/manifest.json) | Requires a portal/runtime supporting Decision actions. Replace `Choice`'s fixed sample text and the four Compose queue placeholders with your ticket input and team integrations. Routing uses the selected choice; the default branch is empty and there is no confidence-based review gate. |
@@ -153,6 +155,17 @@ actions still require a configured model connection.
 | [Azure DevOps Boards work item event automation](scenario-01-work-item-event-automation/manifest.json) | Bind the shared Boards connection, select the same project for the trigger and both actions, and configure the area path, team, supported work item type, and update fields. |
 | [Azure DevOps Boards WIQL query reporting](scenario-04-wiql-query-reporting/manifest.json) | Bind the shared Boards connection, select the same project for all three actions, configure the saved query in both Get and Run, select the query's team context, and review the hourly schedule. |
 | [Azure DevOps Boards sprint and iteration planning](scenario-05-sprint-iteration-planning/manifest.json) | Bind the shared Boards connection, select the same project/team for all three actions, choose an iteration and supported backlog level, and review the hourly schedule. |
+
+The two Advisor templates start with an HTTP request but use action configuration,
+not the request body. Neither includes an HTTP Response action; inspect results
+in Monitoring. Both issue a single list action and do not implement a loop over
+`nextLink`, so do not treat the results as an exhaustive subscription inventory.
+The cost template copies recommendation details and resource IDs into Boards;
+ensure the destination project is appropriate for that data. Its synthetic
+recommendations exercise both High and Medium groups. The Task mock returns the
+same example ID for both iterations; it does not represent a real created Task.
+To test no-write behavior, set the recommendation mock's `value` to an empty
+array or include only Low-impact recommendations.
 
 The four Decisions templates start with an HTTP request but use fixed action
 inputs, not the request body. Decision actions execute live; these templates do

@@ -1,0 +1,220 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "get-advisor-recommendations",
+    "name": "Create Tasks for Azure Advisor Cost Recommendations",
+    "description": "Retrieve a page of Azure Advisor cost recommendations and create an Azure DevOps Task for each nonempty High- or Medium-impact group. Each Task includes an HTML table of recommendation details; repeated live runs can create duplicate Tasks.",
+    "category": ["it-ops", "finance"],
+    "tags": ["Azure Advisor", "Azure DevOps", "Boards", "Cost", "Recommendations"],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/azadvisor",
+      "/serviceProviders/ado-boards",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "When_an_HTTP_request_is_received": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {}
+        }
+      },
+      "actions": {
+        "For_each_impact": {
+          "type": "Foreach",
+          "runAfter": {
+            "List_recommendations": ["Succeeded"]
+          },
+          "foreach": ["High", "Medium"],
+          "actions": {
+            "Filter_recommendations_by_impact": {
+              "type": "Query",
+              "inputs": {
+                "from": "${body('List_recommendations').value}",
+                "where": "${(item()?.properties?.impact ?? '').toLowerCase() === items('For_each_impact').toLowerCase()}"
+              }
+            },
+            "If_recommendations_exist": {
+              "type": "If",
+              "runAfter": {
+                "Filter_recommendations_by_impact": ["Succeeded"]
+              },
+              "expression": "${body('Filter_recommendations_by_impact').length > 0}",
+              "actions": {
+                "Create_recommendations_table": {
+                  "type": "Table",
+                  "inputs": {
+                    "from": "${body('Filter_recommendations_by_impact')}",
+                    "format": "HTML",
+                    "columns": [
+                      {
+                        "header": "Problem",
+                        "value": "${item()?.properties?.shortDescription?.problem}"
+                      },
+                      {
+                        "header": "Solution",
+                        "value": "${item()?.properties?.shortDescription?.solution}"
+                      },
+                      {
+                        "header": "Resource",
+                        "value": "${item()?.properties?.resourceMetadata?.resourceId}"
+                      },
+                      {
+                        "header": "Category",
+                        "value": "${item()?.properties?.category}"
+                      },
+                      {
+                        "header": "Impact",
+                        "value": "${item()?.properties?.impact}"
+                      },
+                      {
+                        "header": "Recommendation ID",
+                        "value": "${item()?.id}"
+                      },
+                      {
+                        "header": "Full details",
+                        "value": "${JSON.stringify(item())}"
+                      }
+                    ]
+                  }
+                },
+                "Create_a_work_item": {
+                  "type": "ServiceProvider",
+                  "runAfter": {
+                    "Create_recommendations_table": ["Succeeded"]
+                  },
+                  "inputs": {
+                    "serviceProviderConfiguration": {
+                      "serviceProviderId": "/serviceProviders/ado-boards",
+                      "operationId": "work-items-create",
+                      "connectionName": "ado-boards_#workflowname#"
+                    },
+                    "parameters": {
+                      "project": "",
+                      "type": "Task",
+                      "body/fields": {
+                        "System.Title": "${'Azure Advisor: ' + body('Filter_recommendations_by_impact').length + ' ' + items('For_each_impact') + '-impact recommendations'}",
+                        "System.Description": "${'<p>' + items('For_each_impact') + '-impact Azure Advisor recommendations for the configured subscription.</p>' + body('Create_recommendations_table')}",
+                        "System.Tags": "${'Azure Advisor; ' + items('For_each_impact') + ' Impact'}"
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            }
+          }
+        },
+        "List_recommendations": {
+          "type": "ServiceProvider",
+          "inputs": {
+            "serviceProviderConfiguration": {
+              "serviceProviderId": "/serviceProviders/azadvisor",
+              "operationId": "recommendations-list",
+              "connectionName": "azadvisor_#workflowname#"
+            },
+            "parameters": {
+              "subscriptionId": "",
+              "$filter": "Category eq Cost"
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "When_an_HTTP_request_is_received",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": null
+    }
+  },
+  "mocks": {
+    "List_recommendations": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "value": [
+            {
+              "id": "/subscriptions/11111111-1111-4111-8111-111111111111/providers/Microsoft.Advisor/recommendations/22222222-2222-4222-8222-222222222222",
+              "name": "22222222-2222-4222-8222-222222222222",
+              "type": "Microsoft.Advisor/recommendations",
+              "properties": {
+                "category": "Cost",
+                "impact": "High",
+                "impactedField": "Microsoft.Compute/virtualMachines",
+                "impactedValue": "example-vm",
+                "shortDescription": {
+                  "problem": "An example virtual machine is underutilized.",
+                  "solution": "Review utilization and consider an appropriately sized VM."
+                },
+                "resourceMetadata": {
+                  "resourceId": "/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/example-vm"
+                }
+              }
+            },
+            {
+              "id": "/subscriptions/11111111-1111-4111-8111-111111111111/providers/Microsoft.Advisor/recommendations/33333333-3333-4333-8333-333333333333",
+              "name": "33333333-3333-4333-8333-333333333333",
+              "type": "Microsoft.Advisor/recommendations",
+              "properties": {
+                "category": "Cost",
+                "impact": "Medium",
+                "impactedField": "Microsoft.Web/serverfarms",
+                "impactedValue": "example-plan",
+                "shortDescription": {
+                  "problem": "An example App Service plan has no active apps.",
+                  "solution": "Review whether the unused plan is still required."
+                },
+                "resourceMetadata": {
+                  "resourceId": "/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/example-rg/providers/Microsoft.Web/serverfarms/example-plan"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Create_a_work_item": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "Created",
+        "body": {
+          "id": 101,
+          "rev": 1,
+          "fields": {
+            "System.WorkItemType": "Task",
+            "System.State": "New",
+            "System.Title": "Example Azure Advisor recommendation Task"
+          },
+          "url": "https://dev.azure.com/example/ExampleProject/_apis/wit/workItems/101"
+        }
+      }
+    }
+  },
+  "connections": {
+    "azadvisor_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/azadvisor"
+    },
+    "ado-boards_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/ado-boards"
+    }
+  }
+}
