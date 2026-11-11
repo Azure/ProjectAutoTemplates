@@ -38,5 +38,7 @@
   "classify-requests-for-refund-using-decisions-action-and-model",
   "route-support-tickets-to-the-right-team-using-the-decisions-api",
   "score-customer-reviews-from-negative-to-positive-using-decisions-score-api",
-  "send-daily-health-email-based-on-azure-monitor-logs"
+  "send-daily-health-email-based-on-azure-monitor-logs",
+  "azure-resource-graph-execute-saved-query",
+  "azure-resource-graph-query-resources"
 ]
