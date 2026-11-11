@@ -40,5 +40,7 @@
   "score-customer-reviews-from-negative-to-positive-using-decisions-score-api",
   "send-daily-health-email-based-on-azure-monitor-logs",
   "get-advisor-recommendations",
+  "azure-resource-graph-execute-saved-query",
+  "azure-resource-graph-query-resources",
   "list-all-recommendations"
 ]

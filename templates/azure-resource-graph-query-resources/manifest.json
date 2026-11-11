@@ -1,0 +1,217 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "azure-resource-graph-query-resources",
+    "name": "Query resources with Azure Resource Graph",
+    "description": "Validate an HTTP request and run an Azure Resource Graph query across the requested subscriptions.",
+    "category": [
+      "data",
+      "it-ops"
+    ],
+    "tags": [
+      "Azure Resource Graph",
+      "KQL",
+      "Inventory"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/azgraph",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Azure Resource Graph (KQL) query to run."
+                },
+                "subscriptionIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Subscription IDs to query."
+                }
+              },
+              "required": [
+                "query",
+                "subscriptionIds"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Validate_Request": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "not": {
+                  "equals": [
+                    "@empty(triggerBody()?['query'])",
+                    true
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "equals": [
+                    "@empty(triggerBody()?['subscriptionIds'])",
+                    true
+                  ]
+                }
+              }
+            ]
+          },
+          "actions": {
+            "Run_a_resource_query": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "serviceProviderId": "/serviceProviders/azgraph",
+                  "operationId": "resources-query",
+                  "connectionName": "azgraph_#workflowname#"
+                },
+                "parameters": {
+                  "body/query": "@triggerBody()?['query']",
+                  "body/subscriptions": "@triggerBody()?['subscriptionIds']",
+                  "body/options": {
+                    "resultFormat": "objectArray"
+                  }
+                }
+              }
+            },
+            "Return_Results": {
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": "@body('Run_a_resource_query')"
+              },
+              "runAfter": {
+                "Run_a_resource_query": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Return_Bad_Request": {
+                "type": "Response",
+                "kind": "Http",
+                "inputs": {
+                  "statusCode": 400,
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "error": {
+                      "code": "InvalidRequest",
+                      "message": "Request body must include a non-empty query and subscriptionIds."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "manual",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "query": "Resources\n| project id, name, type, resourceGroup, subscriptionId, location\n| order by id asc",
+        "subscriptionIds": [
+          "00000000-0000-0000-0000-000000000000"
+        ]
+      }
+    }
+  },
+  "mocks": {
+    "Run_a_resource_query": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "totalRecords": 12,
+          "count": 5,
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/vm-web-01",
+              "name": "vm-web-01",
+              "type": "microsoft.compute/virtualmachines",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/vm-web-02",
+              "name": "vm-web-02",
+              "type": "microsoft.compute/virtualmachines",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Logic/workflows/example-workflow",
+              "name": "example-workflow",
+              "type": "microsoft.logic/workflows",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "westus2"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Network/virtualNetworks/example-vnet",
+              "name": "example-vnet",
+              "type": "microsoft.network/virtualnetworks",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Storage/storageAccounts/examplestorage01",
+              "name": "examplestorage01",
+              "type": "microsoft.storage/storageaccounts",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            }
+          ],
+          "facets": [],
+          "resultTruncated": "false",
+          "$skipToken": "example-continuation-token"
+        }
+      }
+    }
+  },
+  "connections": {
+    "azgraph_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/azgraph"
+    }
+  }
+}
