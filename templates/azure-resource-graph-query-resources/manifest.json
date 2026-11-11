@@ -1,0 +1,314 @@
+{
+  "kind": "AutoTemplate",
+  "apiVersion": "v1",
+  "metadata": {
+    "id": "azure-resource-graph-query-resources",
+    "name": "Query resources with Azure Resource Graph",
+    "description": "Run an Azure Resource Graph query across subscriptions or management groups and return one page of results over HTTP.",
+    "category": [
+      "data",
+      "it-ops"
+    ],
+    "tags": [
+      "Azure Resource Graph",
+      "KQL",
+      "Inventory",
+      "Paging"
+    ],
+    "author": "Microsoft",
+    "source": "builtin",
+    "featuredConnectors": [
+      "/serviceProviders/azgraph",
+      "connectionProviders/request"
+    ]
+  },
+  "workflow": {
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Optional Resource Graph query. Defaults to an ordered virtual machine inventory."
+                },
+                "subscriptionIds": {
+                  "type": "array",
+                  "description": "Subscription IDs to query. Supply this or managementGroupIds, but not both.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "managementGroupIds": {
+                  "type": "array",
+                  "description": "Management group IDs to query. Supply this or subscriptionIds, but not both.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "pageSize": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "description": "Maximum records for this page. Defaults to 100 and cannot exceed 1000."
+                },
+                "continuationToken": {
+                  "type": "string",
+                  "description": "The skip token returned by the preceding page for the same query and scope."
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "actions": {
+        "Normalize_Request": {
+          "type": "Compose",
+          "inputs": {
+            "query": "@if(empty(triggerBody()?['query']), 'Resources | where type =~ ''microsoft.compute/virtualmachines'' | project id, name, resourceGroup, subscriptionId, location | order by id asc', triggerBody()?['query'])",
+            "subscriptionIds": "@coalesce(triggerBody()?['subscriptionIds'], json('[]'))",
+            "managementGroupIds": "@coalesce(triggerBody()?['managementGroupIds'], json('[]'))",
+            "pageSize": "@coalesce(triggerBody()?['pageSize'], 100)",
+            "continuationToken": "@coalesce(triggerBody()?['continuationToken'], '')"
+          }
+        },
+        "Build_Query_Options": {
+          "type": "Compose",
+          "inputs": "@if(empty(outputs('Normalize_Request')?['continuationToken']), setProperty(json('{\"resultFormat\":\"objectArray\",\"allowPartialScopes\":false,\"authorizationScopeFilter\":\"AtScopeAndBelow\"}'), '$top', outputs('Normalize_Request')?['pageSize']), setProperty(setProperty(json('{\"resultFormat\":\"objectArray\",\"allowPartialScopes\":false,\"authorizationScopeFilter\":\"AtScopeAndBelow\"}'), '$top', outputs('Normalize_Request')?['pageSize']), '$skipToken', outputs('Normalize_Request')?['continuationToken']))",
+          "runAfter": {
+            "Normalize_Request": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Validate_Request": {
+          "type": "If",
+          "runAfter": {
+            "Build_Query_Options": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "and": [
+              {
+                "or": [
+                  {
+                    "greater": [
+                      "@length(outputs('Normalize_Request')?['subscriptionIds'])",
+                      0
+                    ]
+                  },
+                  {
+                    "greater": [
+                      "@length(outputs('Normalize_Request')?['managementGroupIds'])",
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "not": {
+                  "and": [
+                    {
+                      "greater": [
+                        "@length(outputs('Normalize_Request')?['subscriptionIds'])",
+                        0
+                      ]
+                    },
+                    {
+                      "greater": [
+                        "@length(outputs('Normalize_Request')?['managementGroupIds'])",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "greaterOrEquals": [
+                  "@outputs('Normalize_Request')?['pageSize']",
+                  1
+                ]
+              },
+              {
+                "lessOrEquals": [
+                  "@outputs('Normalize_Request')?['pageSize']",
+                  1000
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Query_Resources": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "parameters": {
+                  "body/query": "@outputs('Normalize_Request')?['query']",
+                  "body/subscriptions": "@outputs('Normalize_Request')?['subscriptionIds']",
+                  "body/managementGroups": "@outputs('Normalize_Request')?['managementGroupIds']",
+                  "body/options": "@outputs('Build_Query_Options')"
+                },
+                "serviceProviderConfiguration": {
+                  "connectionName": "azgraph_#workflowname#",
+                  "operationId": "resources-query",
+                  "serviceProviderId": "/serviceProviders/azgraph"
+                }
+              }
+            },
+            "Return_One_Page": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "message": "One Resource Graph page is returned. If resultTruncated is true, submit nextContinuationToken as continuationToken with the same query and scope.",
+                  "page": "@body('Query_Resources')",
+                  "nextContinuationToken": "@body('Query_Resources')?['$skipToken']"
+                }
+              },
+              "runAfter": {
+                "Query_Resources": [
+                  "Succeeded"
+                ]
+              },
+              "kind": "Http"
+            },
+            "Return_Query_Error": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "error": {
+                    "code": "ResourceGraphQueryFailed",
+                    "message": "The Resource Graph query failed. Verify the query syntax, scope access for the managed identity, and that any continuation token belongs to the same query and scope.",
+                    "actionStatus": "@actions('Query_Resources')?['status']",
+                    "details": "@actions('Query_Resources')?['error']"
+                  }
+                }
+              },
+              "runAfter": {
+                "Query_Resources": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "kind": "Http"
+            }
+          },
+          "else": {
+            "actions": {
+              "Return_Request_Error": {
+                "type": "Response",
+                "inputs": {
+                  "statusCode": 400,
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "error": {
+                      "code": "InvalidResourceGraphRequest",
+                      "message": "Provide one or more subscriptionIds or one or more managementGroupIds, but not both. pageSize must be from 1 through 1000."
+                    }
+                  }
+                },
+                "kind": "Http"
+              }
+            }
+          }
+        }
+      },
+      "contentVersion": "1.0.0.0"
+    }
+  },
+  "trigger": {
+    "name": "manual",
+    "outputs": {
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queries": {},
+      "body": {
+        "query": "Resources\n| project id, name, type, resourceGroup, subscriptionId, location\n| order by id asc",
+        "subscriptionIds": [
+          "00000000-0000-0000-0000-000000000000"
+        ],
+        "pageSize": 5
+      }
+    }
+  },
+  "mocks": {
+    "Query_Resources": {
+      "status": "Succeeded",
+      "outputs": {
+        "statusCode": "OK",
+        "body": {
+          "totalRecords": 12,
+          "count": 5,
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/vm-web-01",
+              "name": "vm-web-01",
+              "type": "microsoft.compute/virtualmachines",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Compute/virtualMachines/vm-web-02",
+              "name": "vm-web-02",
+              "type": "microsoft.compute/virtualmachines",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Logic/workflows/example-workflow",
+              "name": "example-workflow",
+              "type": "microsoft.logic/workflows",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "westus2"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Network/virtualNetworks/example-vnet",
+              "name": "example-vnet",
+              "type": "microsoft.network/virtualnetworks",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example-rg/providers/Microsoft.Storage/storageAccounts/examplestorage01",
+              "name": "examplestorage01",
+              "type": "microsoft.storage/storageaccounts",
+              "resourceGroup": "example-rg",
+              "subscriptionId": "00000000-0000-0000-0000-000000000000",
+              "location": "eastus"
+            }
+          ],
+          "facets": [],
+          "resultTruncated": "false",
+          "$skipToken": "example-continuation-token"
+        }
+      }
+    }
+  },
+  "connections": {
+    "azgraph_#workflowname#": {
+      "connectorType": "inapp",
+      "apiId": "/serviceProviders/azgraph"
+    }
+  }
+}
