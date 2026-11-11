@@ -4,7 +4,7 @@
   "metadata": {
     "id": "azure-resource-graph-execute-saved-query",
     "name": "Execute a saved Azure Resource Graph query",
-    "description": "Retrieve a saved Azure Resource Graph query and return one page of its results over HTTP.",
+    "description": "Validate an HTTP request, retrieve a saved Azure Resource Graph query, and run it in the requested subscription.",
     "category": [
       "data",
       "it-ops"
@@ -12,8 +12,7 @@
     "tags": [
       "Azure Resource Graph",
       "Saved query",
-      "Inventory",
-      "Paging"
+      "Inventory"
     ],
     "author": "Microsoft",
     "source": "builtin",
@@ -33,171 +32,119 @@
             "schema": {
               "type": "object",
               "properties": {
-                "storageSubscriptionId": {
+                "subscriptionId": {
                   "type": "string",
-                  "default": "00000000-0000-0000-0000-000000000000",
-                  "description": "Subscription containing the saved Resource Graph query. Omit to use the configured target."
+                  "description": "Subscription containing the saved query; the query also runs in this subscription."
                 },
-                "storageResourceGroupName": {
+                "resourceGroupName": {
                   "type": "string",
-                  "default": "example-rg",
-                  "description": "Resource group containing the saved Resource Graph query. Omit to use the configured target."
+                  "description": "Resource group containing the saved query."
                 },
                 "queryName": {
                   "type": "string",
-                  "default": "example-saved-query",
-                  "description": "Saved Resource Graph query name. Omit to use the configured target."
-                },
-                "executionSubscriptionIds": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "default": [
-                    "00000000-0000-0000-0000-000000000000"
-                  ],
-                  "description": "Subscription IDs to query. Omit to use the configured execution subscription."
-                },
-                "paging": {
-                  "type": "object",
-                  "properties": {
-                    "top": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 1000,
-                      "default": 5
-                    },
-                    "skip": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "default": 0
-                    },
-                    "skipToken": {
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": false
+                  "description": "Saved Resource Graph query name."
                 }
               },
-              "additionalProperties": false
+              "required": [
+                "subscriptionId",
+                "resourceGroupName",
+                "queryName"
+              ]
             }
           }
         }
       },
       "actions": {
-        "Validate_request": {
+        "Validate_Request": {
           "type": "If",
-          "expression": "@and(or(empty(triggerBody()?['storageSubscriptionId']), equals(triggerBody()?['storageSubscriptionId'], '00000000-0000-0000-0000-000000000000')), or(empty(triggerBody()?['storageResourceGroupName']), equals(triggerBody()?['storageResourceGroupName'], 'example-rg')), or(empty(triggerBody()?['queryName']), equals(triggerBody()?['queryName'], 'example-saved-query')), or(empty(triggerBody()?['executionSubscriptionIds']), equals(string(triggerBody()?['executionSubscriptionIds']), '[\"00000000-0000-0000-0000-000000000000\"]')))",
+          "expression": {
+            "and": [
+              {
+                "not": {
+                  "equals": [
+                    "@empty(triggerBody()?['subscriptionId'])",
+                    true
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "equals": [
+                    "@empty(triggerBody()?['resourceGroupName'])",
+                    true
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "equals": [
+                    "@empty(triggerBody()?['queryName'])",
+                    true
+                  ]
+                }
+              }
+            ]
+          },
           "actions": {
-            "Scope_Run_Saved_Query": {
-              "type": "Scope",
-              "actions": {
-                "Get_Saved_Query": {
-                  "type": "ServiceProvider",
-                  "inputs": {
-                    "serviceProviderConfiguration": {
-                      "connectionName": "azgraph_#workflowname#",
-                      "operationId": "graph-queries-get",
-                      "serviceProviderId": "/serviceProviders/azgraph"
-                    },
-                    "parameters": {
-                      "subscriptionId": "@if(empty(triggerBody()?['storageSubscriptionId']), '00000000-0000-0000-0000-000000000000', triggerBody()?['storageSubscriptionId'])",
-                      "resourceGroupName": "@if(empty(triggerBody()?['storageResourceGroupName']), 'example-rg', triggerBody()?['storageResourceGroupName'])",
-                      "resourceName": "@if(empty(triggerBody()?['queryName']), 'example-saved-query', triggerBody()?['queryName'])"
-                    }
-                  }
+            "Get_Saved_Query": {
+              "type": "ServiceProvider",
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "connectionName": "azgraph_#workflowname#",
+                  "operationId": "graph-queries-get",
+                  "serviceProviderId": "/serviceProviders/azgraph"
                 },
-                "Run_Resource_Graph_Query": {
-                  "type": "ServiceProvider",
-                  "runAfter": {
-                    "Get_Saved_Query": [
-                      "Succeeded"
-                    ]
-                  },
-                  "inputs": {
-                    "serviceProviderConfiguration": {
-                      "connectionName": "azgraph_#workflowname#",
-                      "operationId": "resources-query",
-                      "serviceProviderId": "/serviceProviders/azgraph"
-                    },
-                    "parameters": {
-                      "body/query": "@body('Get_Saved_Query')?['properties']?['query']",
-                      "body/subscriptions": "@if(empty(triggerBody()?['executionSubscriptionIds']), createArray('00000000-0000-0000-0000-000000000000'), triggerBody()?['executionSubscriptionIds'])",
-                      "body/options": "@if(empty(triggerBody()?['paging']?['skipToken']), setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'), '$top', coalesce(triggerBody()?['paging']?['top'], 5)), '$skip', coalesce(triggerBody()?['paging']?['skip'], 0)), 'resultFormat', 'objectArray'), 'allowPartialScopes', false), 'authorizationScopeFilter', 'AtScopeAndBelow'), setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'), '$top', coalesce(triggerBody()?['paging']?['top'], 5)), '$skip', coalesce(triggerBody()?['paging']?['skip'], 0)), 'resultFormat', 'objectArray'), 'allowPartialScopes', false), 'authorizationScopeFilter', 'AtScopeAndBelow'), '$skipToken', triggerBody()?['paging']?['skipToken']))"
-                    }
+                "parameters": {
+                  "subscriptionId": "@triggerBody()?['subscriptionId']",
+                  "resourceGroupName": "@triggerBody()?['resourceGroupName']",
+                  "resourceName": "@triggerBody()?['queryName']"
+                }
+              }
+            },
+            "Run_Resource_Graph_Query": {
+              "type": "ServiceProvider",
+              "runAfter": {
+                "Get_Saved_Query": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "serviceProviderConfiguration": {
+                  "connectionName": "azgraph_#workflowname#",
+                  "operationId": "resources-query",
+                  "serviceProviderId": "/serviceProviders/azgraph"
+                },
+                "parameters": {
+                  "body/query": "@body('Get_Saved_Query')?['properties']?['query']",
+                  "body/subscriptions": "@createArray(triggerBody()?['subscriptionId'])",
+                  "body/options": {
+                    "resultFormat": "objectArray"
                   }
                 }
               }
             },
-            "Return_success": {
+            "Return_Results": {
               "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Run_Resource_Graph_Query": [
+                  "Succeeded"
+                ]
+              },
               "inputs": {
                 "statusCode": 200,
                 "headers": {
                   "Content-Type": "application/json"
                 },
-                "body": {
-                  "savedQuery": {
-                    "id": "@body('Get_Saved_Query')?['id']",
-                    "name": "@body('Get_Saved_Query')?['name']",
-                    "type": "@body('Get_Saved_Query')?['type']",
-                    "location": "@body('Get_Saved_Query')?['location']",
-                    "etag": "@body('Get_Saved_Query')?['etag']",
-                    "tags": "@body('Get_Saved_Query')?['tags']",
-                    "query": "@body('Get_Saved_Query')?['properties']?['query']",
-                    "description": "@body('Get_Saved_Query')?['properties']?['description']",
-                    "resultKind": "@body('Get_Saved_Query')?['properties']?['resultKind']",
-                    "timeModified": "@body('Get_Saved_Query')?['properties']?['timeModified']"
-                  },
-                  "executionScope": {
-                    "subscriptionIds": "@if(empty(triggerBody()?['executionSubscriptionIds']), createArray('00000000-0000-0000-0000-000000000000'), triggerBody()?['executionSubscriptionIds'])"
-                  },
-                  "records": "@body('Run_Resource_Graph_Query')?['data']",
-                  "page": {
-                    "returnedRecords": "@body('Run_Resource_Graph_Query')?['count']",
-                    "totalRecords": "@body('Run_Resource_Graph_Query')?['totalRecords']",
-                    "resultTruncated": "@body('Run_Resource_Graph_Query')?['resultTruncated']",
-                    "continuationToken": "@body('Run_Resource_Graph_Query')?['$skipToken']",
-                    "hasMore": "@or(equals(body('Run_Resource_Graph_Query')?['resultTruncated'], 'true'), not(empty(body('Run_Resource_Graph_Query')?['$skipToken'])))"
-                  },
-                  "notice": "This response contains one page of Resource Graph results. Follow continuationToken with the same retrieved query and execution subscription when hasMore is true."
-                }
-              },
-              "runAfter": {
-                "Scope_Run_Saved_Query": [
-                  "Succeeded"
-                ]
-              },
-              "kind": "Http"
-            },
-            "Return_connector_error": {
-              "type": "Response",
-              "inputs": {
-                "statusCode": 502,
-                "headers": {
-                  "Content-Type": "application/json"
-                },
-                "body": {
-                  "error": {
-                    "code": "ResourceGraphOperationFailed",
-                    "message": "The configured saved query could not be retrieved or executed. Verify managed-identity access and the saved query syntax.",
-                    "actions": "@result('Scope_Run_Saved_Query')"
-                  }
-                }
-              },
-              "runAfter": {
-                "Scope_Run_Saved_Query": [
-                  "Failed",
-                  "TimedOut"
-                ]
-              },
-              "kind": "Http"
+                "body": "@body('Run_Resource_Graph_Query')"
+              }
             }
           },
           "else": {
             "actions": {
-              "Return_invalid_request": {
+              "Return_Bad_Request": {
                 "type": "Response",
+                "kind": "Http",
                 "inputs": {
                   "statusCode": 400,
                   "headers": {
@@ -206,18 +153,16 @@
                   "body": {
                     "error": {
                       "code": "InvalidRequest",
-                      "message": "When target fields are supplied, they must match the configured saved query and execution subscription."
+                      "message": "Request body must include a non-empty subscriptionId, resourceGroupName, and queryName."
                     }
                   }
-                },
-                "kind": "Http"
+                }
               }
             }
           }
         }
       },
-      "contentVersion": "1.0.0.0",
-      "outputs": {}
+      "contentVersion": "1.0.0.0"
     }
   },
   "trigger": {
@@ -229,16 +174,9 @@
       },
       "queries": {},
       "body": {
-        "storageSubscriptionId": "00000000-0000-0000-0000-000000000000",
-        "storageResourceGroupName": "example-rg",
-        "queryName": "example-saved-query",
-        "executionSubscriptionIds": [
-          "00000000-0000-0000-0000-000000000000"
-        ],
-        "paging": {
-          "top": 5,
-          "skip": 0
-        }
+        "subscriptionId": "00000000-0000-0000-0000-000000000000",
+        "resourceGroupName": "example-rg",
+        "queryName": "example-saved-query"
       }
     }
   },
