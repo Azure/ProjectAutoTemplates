@@ -253,6 +253,43 @@ test('reports the exact missing or unexpected schema property', (t) => {
   assert.match(errors, /schema: unexpected: must NOT have additional properties/);
 });
 
+test('accepts empty and populated workflow notes', (t) => {
+  const f = fixture(t);
+  const template = createTemplate();
+  for (const notes of [
+    {},
+    {
+      note1: { content: 'Explain this workflow', color: '#FFFBCC', metadata: { position: { x: -1.5, y: 80 }, width: 240, height: 160 } },
+      note2: { content: '', color: '', metadata: { position: { x: 0, y: 0 }, width: 0, height: 0 } },
+    },
+  ]) {
+    f.writeTemplate({ ...template, workflow: { ...template.workflow, notes } });
+    assert.deepEqual(f.validate(), { templateCount: 1, errors: [] });
+  }
+});
+
+for (const notes of [
+  null,
+  [],
+  { note1: {} },
+  { note1: { content: 'Note', color: 'yellow', metadata: { position: { x: 1 }, width: 240, height: 160 } } },
+  { note1: { content: 'Note', color: 'yellow', metadata: { position: { x: 1, y: 2 }, width: '240', height: 160 } } },
+]) {
+  test(`rejects invalid workflow notes ${JSON.stringify(notes)}`, (t) => {
+    const f = fixture(t);
+    const template = createTemplate();
+    f.writeTemplate({ ...template, workflow: { ...template.workflow, notes } });
+    assert.match(messages(f.validate()), /schema: workflow\.notes/);
+  });
+}
+
+test('rejects unsupported workflow wrapper fields alongside notes', (t) => {
+  const f = fixture(t);
+  const template = createTemplate();
+  f.writeTemplate({ ...template, workflow: { ...template.workflow, notes: {}, kind: 'Stateful' } });
+  assert.match(messages(f.validate()), /schema: workflow\.kind: must NOT have additional properties/);
+});
+
 for (const [field, value] of [['id', 'different'], ['author', 'Community'], ['source', 'community']]) {
   test(`retains the metadata ${field} invariant`, (t) => {
     const f = fixture(t);

@@ -103,7 +103,7 @@
       }
     },
     "workflow": {
-      "description": "The bundled workflow: the definition only, with no wrapper metadata.",
+      "description": "The bundled workflow definition and optional canvas notes, with no other wrapper metadata.",
       "type": "object",
       "required": ["definition"],
       "properties": {
@@ -114,6 +114,34 @@
           "properties": {
             "$schema": {
               "const": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
+            }
+          }
+        },
+        "notes": {
+          "description": "Canvas notes keyed by note id.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["content", "color", "metadata"],
+            "properties": {
+              "content": { "type": "string" },
+              "color": { "type": "string" },
+              "metadata": {
+                "type": "object",
+                "required": ["position", "width", "height"],
+                "properties": {
+                  "position": {
+                    "type": "object",
+                    "required": ["x", "y"],
+                    "properties": {
+                      "x": { "type": "number" },
+                      "y": { "type": "number" }
+                    }
+                  },
+                  "width": { "type": "number" },
+                  "height": { "type": "number" }
+                }
+              }
             }
           }
         }
