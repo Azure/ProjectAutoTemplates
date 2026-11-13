@@ -2,12 +2,11 @@
   "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
-    "id": "classify-requests-for-refund-using-decisions-action-and-model",
-    "name": "Classify requests for refund using decisions action and model",
-    "description": "This workflow uses the Yes/No decisions actions to determine if a request is for refund. And if so, it sends the request for refund processing",
+    "id": "score-customer-reviews-from-negative-to-positive-using-decision-model-and-score-action",
+    "name": "Score customer reviews from negative to positive using decision model and Score action",
+    "description": "Measure how customers really feel by scoring reviews from negative to positive with the decision model and Score action. Scores fall between levels for mixed opinions, giving you a finer read than a simple positive or negative label.",
     "category": [
-      "ai",
-      "categorization"
+      "ai"
     ],
     "tags": [],
     "author": "Microsoft",
@@ -27,22 +26,22 @@
         }
       },
       "actions": {
-        "Yes_No": {
+        "Score": {
           "type": "Decision",
           "inputs": {
-            "state": "I was charged twice. Please send back the extra payment",
+            "state": "Oh great, another charger that stops working after a week. Just what I needed.",
             "questions": {
               "decision": {
-                "type": "noul",
-                "instructions": "Is the customer asking for a refund?",
-                "criteria": {
-                  "true": "Yes",
-                  "false": "No"
-                }
+                "type": "score",
+                "instructions": "Identify the sentiment of customer reviews provided to you",
+                "criteria": [
+                  "Negative",
+                  "Neutral",
+                  "Positive"
+                ]
               }
             }
           },
-          "runAfter": {},
           "metadata": {
             "parameterContentTypes": {
               "state": "text"
@@ -52,25 +51,24 @@
         "Condition": {
           "type": "If",
           "runAfter": {
-            "Yes_No": [
+            "Score": [
               "Succeeded"
             ]
           },
           "expression": {
             "and": [
               {
-                "greater": [
-                  "${outputs('Yes_No')['decision']['trueProbability']}",
-                  0.75
+                "less": [
+                  "${outputs('Score')['decision']['score']}",
+                  1
                 ]
               }
             ]
           },
           "actions": {
-            "Refund_Queue": {
+            "NegativeReview": {
               "type": "Compose",
-              "inputs": "Process Refund",
-              "runAfter": {},
+              "inputs": "Loop in Customer Support",
               "metadata": {
                 "parameterContentTypes": {
                   "inputs": "text"
@@ -84,6 +82,20 @@
         }
       },
       "contentVersion": "1.0.0.0"
+    },
+    "notes": {
+      "19212bc5-0e79-4056-9207-0b799c68b046": {
+        "content": "Negative - Complete waste of money. It broke on day two and the company ignored my emails. Avoid.\n\nNegative - Oh great, another charger that stops working after a week. Just what I needed.\n\nPositive - Works well and was easy to set up. Happy with it.\n\nNeutral - It’s fine. Does what it says, nothing special.\n\n\n",
+        "color": "#FFFBCC",
+        "metadata": {
+          "position": {
+            "x": 443,
+            "y": -127
+          },
+          "width": 240,
+          "height": 240
+        }
+      }
     }
   },
   "trigger": {
