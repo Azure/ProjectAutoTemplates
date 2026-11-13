@@ -2,12 +2,11 @@
   "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
-    "id": "route-support-tickets-to-the-right-team-using-the-decisions-api",
-    "name": "Route support tickets to the right team using the Decisions API.",
-    "description": "Route incoming support tickets to the right team using the Decisions API choice question. Every decision comes with a confidence score, so unclear tickets can be flagged for a person",
+    "id": "route-support-tickets-to-the-right-team-using-the-decision-model-and-choice-action",
+    "name": "Route support tickets to the right team using the decision model and Choice action",
+    "description": "Route incoming support tickets to the right team using the decision model and Choice action. Every decision comes with a confidence score, so unclear tickets can be flagged for a person",
     "category": [
-      "ai",
-      "categorization"
+      "ai"
     ],
     "tags": [],
     "author": "Microsoft",
@@ -44,7 +43,6 @@
               }
             }
           },
-          "runAfter": {},
           "metadata": {
             "parameterContentTypes": {
               "state": "text"
@@ -71,7 +69,6 @@
                 "Billing-queue": {
                   "type": "Compose",
                   "inputs": "Replace this step with processing for billing questions",
-                  "runAfter": {},
                   "metadata": {
                     "parameterContentTypes": {
                       "inputs": "text"
@@ -86,7 +83,6 @@
                 "Shipping-queue": {
                   "type": "Compose",
                   "inputs": "Replace this step with processing for shipping questions",
-                  "runAfter": {},
                   "metadata": {
                     "parameterContentTypes": {
                       "inputs": "text"
@@ -101,7 +97,6 @@
                 "Account_access_queue": {
                   "type": "Compose",
                   "inputs": "Replace this step with processing for account access questions",
-                  "runAfter": {},
                   "metadata": {
                     "parameterContentTypes": {
                       "inputs": "text"
@@ -116,7 +111,6 @@
                 "Tech_Support_queue": {
                   "type": "Compose",
                   "inputs": "Replace this step with processing for tech support questions",
-                  "runAfter": {},
                   "metadata": {
                     "parameterContentTypes": {
                       "inputs": "text"
@@ -132,6 +126,20 @@
         }
       },
       "contentVersion": "1.0.0.0"
+    },
+    "notes": {
+      "256c496c-d1ec-4536-b759-9529a218208e": {
+        "content": "Shipping: “My order was marked as delivered yesterday, but nothing came to my door.”\nTechnical support: “The app crashes every time I try to upload a photo. I’m on the latest version.”\nAccount access: “I reset my password, but I still can’t log in. It says my account is locked.”\nBilling: “I was charged twice for my subscription this month. Please refund the extra charge.”",
+        "color": "#FFFBCC",
+        "metadata": {
+          "position": {
+            "x": 451,
+            "y": 75
+          },
+          "width": 240,
+          "height": 307
+        }
+      }
     }
   },
   "trigger": {

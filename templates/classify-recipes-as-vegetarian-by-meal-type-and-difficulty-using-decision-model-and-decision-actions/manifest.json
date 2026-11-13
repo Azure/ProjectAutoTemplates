@@ -2,19 +2,18 @@
   "kind": "AutoTemplate",
   "apiVersion": "v1",
   "metadata": {
-    "id": "classify-recipes-as-vegetarian-by-meal-type-and-difficulty",
-    "name": "Classify recipes as vegetarian, by meal type, and difficulty",
-    "description": "Use the Decisions yes/no, choice, and score APIs to check if a recipe is vegetarian, pick its meal type, and rate its difficulty. Each result includes a confidence value, so unclear recipes are flagged for review.",
+    "id": "classify-recipes-as-vegetarian-by-meal-type-and-difficulty-using-decision-model-and-decision-actions",
+    "name": "Classify recipes as vegetarian, by meal type, and difficulty using decision model and decision actions",
+    "description": "Use the Decision action - Yes/No, Choice, and Score  to check if a recipe is vegetarian, pick its meal type, and rate its difficulty. Each result includes a confidence value, so unclear recipes are flagged for review.",
     "category": [
-      "ai",
-      "categorization"
+      "ai"
     ],
     "tags": [],
     "author": "Microsoft",
     "source": "builtin",
     "featuredConnectors": [
-      "connectionProviders/request",
-      "/managedApis/outlook"
+      "/managedApis/outlook",
+      "connectionProviders/request"
     ]
   },
   "workflow": {
@@ -57,7 +56,6 @@
         "Recipie": {
           "type": "Compose",
           "inputs": "Recipe: Creamy Mushroom Risotto\nTotal time: 45 minutes\n\nIngredients: Arborio rice, mushrooms, onion, garlic, vegetable broth, white wine, parmesan, butter, parsley\n\nSteps: Sauté onion and garlic in butter. Add mushrooms and cook until browned. Stir in rice and toast for 2 minutes. Add wine, then add warm broth one ladle at a time, stirring constantly for about 25 minutes until creamy. Finish with parmesan and parsley.",
-          "runAfter": {},
           "metadata": {
             "parameterContentTypes": {
               "inputs": "text"
@@ -138,7 +136,6 @@
                       }
                     }
                   },
-                  "runAfter": {},
                   "metadata": {
                     "parameterContentTypes": {
                       "state": "json"
@@ -185,6 +182,20 @@
         }
       },
       "contentVersion": "1.0.0.0"
+    },
+    "notes": {
+      "42217f9b-59d5-4b8f-8a4e-6920bbb3aeff": {
+        "content": "ADVANCED\nRecipe: Homemade Croissants\nTotal time: 3 days\n\nIngredients: flour, butter, milk, sugar, yeast, salt, egg\n\nSteps: Make the dough and chill overnight. Laminate the dough with a block of butter, folding and chilling between each of three turns. Shape into croissants, proof for several hours, brush with egg, and bake until golden.\n\nNOT VEG\n\nRecipe: French Onion Soup\nTotal time: 1 hour 15 minutes\n\nIngredients: onions, beef broth, butter, thyme, baguette, gruyère cheese\n\nSteps: Slowly caramelize onions in butter for 45 minutes. Add chicken broth and thyme and simmer for 20 minutes. Ladle into bowls, top with toasted bread and gruyère, and broil until the cheese melts.\n\n",
+        "color": "#FFFBCC",
+        "metadata": {
+          "position": {
+            "x": 815,
+            "y": -591
+          },
+          "width": 408,
+          "height": 424
+        }
+      }
     }
   },
   "trigger": {
