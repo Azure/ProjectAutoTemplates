@@ -45,7 +45,7 @@ for metadata, trigger samples, mocks, and connections:
 | --- | --- |
 | `kind`, `apiVersion` | `"AutoTemplate"` and `"v1"`, respectively. |
 | `metadata` | `id` (must match the folder name), `name`, `description`, `category` (non-empty array of supported ids), `author` (`"Microsoft"`), `source` (`"builtin"`), and `featuredConnectors` (array of connector ids shown on the card, such as `"/managedApis/sql"`). Use optional `tags` for discovery terms. |
-| `workflow` | The workflow to import. Its `definition.$schema` must declare the official Azure Logic Apps workflow definition schema described below. |
+| `workflow` | The workflow to import. Its `definition.$schema` must declare the official Azure Logic Apps workflow definition schema described below. Optional `notes` is an object keyed by note id; each note has string `content` and `color`, and `metadata` containing numeric `position.x`, `position.y`, `width`, and `height`. An empty notes object is valid. |
 | `trigger` | Sample trigger outputs used to pre-fill test runs. |
 | `mocks` | Canned per-action outputs with `status` of `"Succeeded"` or `"Failed"`, or `{ "runForReal": true }` opt-outs. |
 | `connections` | Connection references whose names end with the `_#workflowname#` placeholder for rewriting at import time. |
