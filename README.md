@@ -22,7 +22,9 @@ walks you through the contribution:
 
 1. It asks you to confirm that you imported the exact JSON with **Import from JSON**
    in the templates gallery, created a workflow from it, and got a successful test
-   run. If you haven't, it gives you the testing steps and stops.
+   run. If you haven't, it gives you the testing steps and stops. If the import
+   or test failed, it helps you find the cause. You can change your answer at
+   any time, for example by saying "I've tested it now".
 2. It checks the JSON for credentials and personal data.
 3. It adds `templates/<id>/manifest.json`, updates `templates/manifest.json`,
    and runs `pnpm run validate`.

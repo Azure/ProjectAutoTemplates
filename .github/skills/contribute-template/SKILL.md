@@ -29,9 +29,45 @@ generate it from the portal and stop.
 
 ## 2. Confirm the portal test (required gate)
 
-Give the contributor these steps, then ask the question below. Use your
-question tool with choices if available; don't continue on silence or an
-ambiguous answer.
+Ask the question below. Use your question tool with choices if available;
+don't continue on silence or an ambiguous answer.
+
+Ask: "Did you import this exact JSON with **Import from JSON**, create a
+workflow from it, and get a successful test run with the expected result?"
+
+Choices:
+
+- Yes, import and workflow test both succeeded
+- Not yet. I'll test it first (tell me how)
+- I tested it, but the import or test failed
+
+Only the first answer continues. For the others, don't create a branch,
+commit, or PR.
+
+**Not yet:** give the testing steps below, then stop. Tell the contributor to
+come back and say "I've tested it" when done, and ask the gate question again.
+
+**Failed:** ask whether the import or the workflow test failed, and for the
+error message or failing action. Never ask them to paste secrets. Then help:
+
+- **Import failed:** check the JSON against the
+  [template format](../../../templates/README.md#template-format) and explain
+  what's wrong. If the JSON is malformed or incomplete, ask them to regenerate
+  it with **Create template**.
+- **Test failed or gave the wrong result:** check the failing action's
+  connection, parameters, and test data, and whether trigger samples and mocks
+  match the workflow. If the template itself needs a fix, the contributor
+  should fix the workflow in the portal and regenerate the JSON.
+
+After any fix, give the testing steps again and re-ask the gate question with
+the updated JSON.
+
+**Changing the answer:** the contributor can change their answer at any time
+by telling you, for example "I've tested it now" or "Actually, the test
+failed". Ask the gate question again and follow the new answer. If a "Yes" is
+withdrawn, stop any PR work that hasn't happened yet. If the PR already
+exists, tell the contributor and offer to mark it as a draft or add a comment
+until a passing test is confirmed.
 
 **How to test your template**
 
@@ -48,19 +84,7 @@ ambiguous answer.
    expected result. Actions without enabled test data run live, so use safe
    targets.
 
-Ask: "Did you import this exact JSON with **Import from JSON**, create a
-workflow from it, and get a successful test run with the expected result?"
-
-Choices:
-
-- Yes, import and workflow test both succeeded
-- Not yet. I'll test it first
-- I tested it, but the import or test failed
-
-Only the first answer continues. For the other answers, stop and repeat the
-testing steps. Don't create a branch, commit, or PR.
-
-Then ask for a one- or two-sentence test result, for example: "Imported in
+**After a "Yes":** ask for a one- or two-sentence test result, for example: "Imported in
 my test environment, created a workflow, test run succeeded and sent the expected email."
 Ask which environment they used and any setup a reviewer needs. You'll put
 these in the PR body.
