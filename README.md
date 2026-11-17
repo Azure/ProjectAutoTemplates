@@ -14,10 +14,30 @@ for the portal-to-PR workflow and the **`pnpm run validate` preflight** enforced
 Use the [template reference](templates/README.md) for format requirements, categories,
 and configuration notes.
 
+### Use the Copilot skill
+
+This repository includes a [`contribute-template`](.github/skills/contribute-template/SKILL.md)
+skill for GitHub Copilot. Give it your portal-generated template JSON, and it
+walks you through the contribution:
+
+1. It asks you to confirm that you imported the exact JSON with **Import from JSON**
+   in the templates gallery, created a workflow from it, and got a successful test
+   run. If you haven't, it gives you the testing steps and stops.
+2. It checks the JSON for credentials and personal data.
+3. It adds `templates/<id>/manifest.json`, updates `templates/manifest.json`,
+   and runs `pnpm run validate`.
+4. It drafts the pull request with your test result and asks you to confirm
+   before opening it.
+
+To use it, open a Copilot session in your clone of this repository and ask, for
+example: "Contribute this template: `path/to/manifest.json`". Any change to the
+template JSON after testing means you need to import and test it again.
+
 ## Repository layout
 
 ```text
 CONTRIBUTING.md                 # contributor workflow, validator, and PR guidance
+.github/skills/contribute-template/SKILL.md  # Copilot skill for template contributions
 templates/
   README.md                     # template format, categories, and configuration
   manifest.json                 # JSON array of template folder ids: the publish allow-list
