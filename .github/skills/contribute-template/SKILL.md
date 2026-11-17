@@ -15,13 +15,30 @@ skill, the repository guides win.
 
 ## 1. Get the manifest
 
-Ask for the template JSON: a file path or pasted contents. Accept one template
-per run. Parse it and stop with a clear message if it isn't valid JSON.
+If the contributor already gave a file path or pasted JSON, use it. Otherwise,
+look for a candidate before asking: run `git status --porcelain -- templates/`
+and collect untracked (`??`) or modified (` M`) `templates/<id>/manifest.json`
+files. An untracked folder can show as `?? templates/<id>/`; check for
+`manifest.json` inside it.
 
-Read `metadata.id` and `metadata.name`. If `templates/<metadata.id>/` already
-exists, confirm whether this is an **update** to that template or a new template
-that needs a different id. Never overwrite an existing template without
-confirmation.
+- **One candidate:** ask "Is this the template you want to contribute:
+  `templates/<id>/manifest.json` (new or update)?" Continue only on a yes.
+- **Several:** list them and ask which one to use.
+- **None, or the contributor says no:** ask for a file path or pasted JSON.
+
+Never use a detected file without the contributor's confirmation. Only look
+inside the repository; don't scan other folders such as Downloads.
+
+Accept one template per run. Parse it and stop with a clear message if it
+isn't valid JSON.
+
+Read `metadata.id` and `metadata.name`. Decide whether this is a new template
+or an update from what's tracked in git, not from whether the folder exists on
+disk: a detected untracked file is **new**, and a detected modified file is an
+**update**. For a path or pasted JSON, if `templates/<metadata.id>/manifest.json`
+is already tracked, confirm whether this is an **update** to that template or a
+new template that needs a different id. Never overwrite an existing template
+without confirmation.
 
 The JSON should come from the portal's **Create template** flow on a succeeded
 run. If the contributor wrote or heavily edited it by hand, tell them to

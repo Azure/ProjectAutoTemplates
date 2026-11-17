@@ -32,7 +32,9 @@ walks you through the contribution:
    before opening it.
 
 To use it, open a Copilot session in your clone of this repository and ask, for
-example: "Contribute this template: `path/to/manifest.json`". Any change to the
+example: "Contribute this template: `path/to/manifest.json`". If you've already
+saved it as `templates/<id>/manifest.json`, just say "Contribute my template";
+it finds the new file and asks you to confirm it. Any change to the
 template JSON after testing means you need to import and test it again.
 
 ## Repository layout
