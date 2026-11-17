@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Product bug (gallery, apply engine, test data / mock runs)
+    url: https://github.com/Azure/ProjectAutoTemplates/blob/main/SUPPORT.md
+    about: >-
+      If the problem reproduces with any template (or with none), it is a
+      product issue, not template content — route it through the internal
+      Project Auto support/escalation path, not this repository.
