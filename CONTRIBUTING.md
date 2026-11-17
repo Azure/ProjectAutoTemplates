@@ -2,6 +2,8 @@
 
 This guide covers adding or updating a template and preparing a pull request.
 For the detailed authoring rules, see the [template reference](templates/README.md).
+As an optional shortcut, the [`contribute-template` Copilot skill](.github/skills/contribute-template/SKILL.md)
+walks you through these steps, including the required import test.
 
 ## Before you start
 
